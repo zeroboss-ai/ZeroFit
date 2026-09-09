@@ -2,13 +2,13 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import BMICalculator from '@/components/calculators/BMICalculator';
-import BMRCalculator from '@/components/calculators/BMRCalculator';
-import WaterCalculator from '@/components/calculators/WaterCalculator';
-import MacroCalculator from '@/components/calculators/MacroCalculator';
-import BodyFatCalculator from '@/components/calculators/BodyFatCalculator';
+import BMICalculator from '../../components/calculators/BMICalculator';
+import BMRCalculator from '../../components/calculators/BMRCalculator';
+import WaterCalculator from '../../components/calculators/WaterCalculator';
+import MacroCalculator from '../../components/calculators/MacroCalculator';
+import BodyFatCalculator from '../../components/calculators/BodyFatCalculator';
 import { Calculator, Scale, Flame, Droplet, PieChart, Percent, HeartPulse } from 'lucide-react';
-import MedicalDisclaimer from '@/components/MedicalDisclaimer';
+import MedicalDisclaimer from '../../components/MedicalDisclaimer';
 
 export default function CalculatorsPage() {
   const { t } = useApp();
