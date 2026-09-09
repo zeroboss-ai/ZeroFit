@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: zero-fit
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.17.0
+      - key: GEMINI_API_KEY
+        value: AQ.Ab8RN6L9FOq6GUt07_nxkoZAF0epj8seD3A8AZU74R0b2by20Q
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MONGODB_URI
+        sync: false
