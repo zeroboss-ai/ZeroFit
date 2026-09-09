@@ -55,7 +55,9 @@ export default function BMRCalculator() {
               type="button"
               onClick={() => setGender('male')}
               className={`py-1.5 text-xs font-bold rounded-md transition-colors ${
-                gender === 'male' ? 'bg-white dark:bg-slate-700 shadow-sm text-emerald-600' : 'text-slate-600'
+                gender === 'male'
+                  ? 'bg-white dark:bg-slate-700 shadow-sm text-emerald-600 dark:text-emerald-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               Male
@@ -64,7 +66,9 @@ export default function BMRCalculator() {
               type="button"
               onClick={() => setGender('female')}
               className={`py-1.5 text-xs font-bold rounded-md transition-colors ${
-                gender === 'female' ? 'bg-white dark:bg-slate-700 shadow-sm text-emerald-600' : 'text-slate-600'
+                gender === 'female'
+                  ? 'bg-white dark:bg-slate-700 shadow-sm text-emerald-600 dark:text-emerald-400'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
               Female

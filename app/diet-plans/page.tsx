@@ -179,7 +179,7 @@ export default function DietPlansPage() {
             <div className="pt-4 flex gap-2">
               <button
                 onClick={handlePrint}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center space-x-2 transition-all shadow-sm"
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center space-x-2 transition-all shadow-sm"
               >
                 <Printer className="w-4 h-4" />
                 <span>Export / Print PDF Plan</span>

@@ -6,17 +6,80 @@
   :root {
     --background: #f8fafc;
     --foreground: #0f172a;
+    color-scheme: light;
   }
 
-  .dark {
+  html.dark, .dark {
     --background: #090d16;
     --foreground: #f8fafc;
+    color-scheme: dark;
   }
 
   body {
     background-color: var(--background);
     color: var(--foreground);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Native Form Controls & Dropdowns in Dark Theme */
+  html.dark input,
+  html.dark select,
+  html.dark textarea {
+    color-scheme: dark;
+  }
+
+  html.dark select option {
+    background-color: #0f172a;
+    color: #f8fafc;
+  }
+
+  select option {
+    background-color: #ffffff;
+    color: #0f172a;
+  }
+
+  /* Date / calendar picker indicator visibility in dark mode */
+  html.dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+  }
+
+  /* Universal Dark Theme Text Contrast Safety Nets */
+  .dark .text-slate-400 {
+    color: #94a3b8;
+  }
+  .dark .text-slate-500 {
+    color: #cbd5e1;
+  }
+  .dark .text-slate-600 {
+    color: #e2e8f0;
+  }
+  .dark .text-slate-700 {
+    color: #f1f5f9;
+  }
+  .dark .text-slate-800 {
+    color: #f8fafc;
+  }
+  .dark .text-slate-900 {
+    color: #ffffff;
+  }
+  .dark .text-gray-400 {
+    color: #9ca3af;
+  }
+  .dark .text-gray-500 {
+    color: #d1d5db;
+  }
+  .dark .text-gray-600 {
+    color: #e5e7eb;
+  }
+  .dark .text-gray-700 {
+    color: #f3f4f6;
+  }
+  .dark .text-gray-800 {
+    color: #f9fafb;
+  }
+  .dark .text-gray-900 {
+    color: #ffffff;
   }
 }
 

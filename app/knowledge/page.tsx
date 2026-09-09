@@ -136,7 +136,7 @@ export default function KnowledgeHubPage() {
         {/* Secondary Filters: Age Group & Goal */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
           <div className="flex items-center space-x-2">
-            <span className="font-bold text-slate-500 whitespace-nowrap">Filter Age:</span>
+            <span className="font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Filter Age:</span>
             <select
               value={selectedAgeGroup}
               onChange={(e) => setSelectedAgeGroup(e.target.value)}
@@ -151,7 +151,7 @@ export default function KnowledgeHubPage() {
           </div>
 
           <div className="flex items-center space-x-2">
-            <span className="font-bold text-slate-500 whitespace-nowrap">Filter Goal:</span>
+            <span className="font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">Filter Goal:</span>
             <select
               value={selectedGoal}
               onChange={(e) => setSelectedGoal(e.target.value)}
