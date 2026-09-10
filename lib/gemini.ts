@@ -1,9 +1,10 @@
 import { UserProfile, Language } from '@/types';
 
 export const GEMINI_API_KEY =
-  process.env.GEMINI_API_KEY?.trim() || 'AQ.Ab8RN6L9FOq6GUt07_nxkoZAF0epj8seD3A8AZU74R0b2by20Q';
+  process.env.GEMINI_API_KEY?.trim() || '';
 
-export const GEMINI_MODEL = 'gemini-3.6-flash';
+export const GEMINI_MODELS = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+export const GEMINI_MODEL = 'gemini-1.5-flash';
 
 export interface ActivityAnalysisResult {
   caloriesConsumed: number;
@@ -110,34 +111,16 @@ CRITICAL SCIENTIFIC PACING & EVALUATION LOGIC:
    - Pacing Title: "🧘 Go Slow & Refuel: Critical Undereating / Overtraining Detected"`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: systemPrompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 3500,
-        },
-      }),
-    });
+    const rawText = await queryGeminiAPI(systemPrompt, 3500, 0.2);
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.warn('Gemini API returned error status, falling back to local formulas:', errText);
-      return fallbackAnalysis(foodText, activityText, profile);
-    }
-
-    const data = await response.json();
-    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!candidateText) {
+    if (!rawText) {
       return fallbackAnalysis(foodText, activityText, profile);
     }
 
     // Robust JSON extraction matching the outer-most { ... }
-    let cleaned = candidateText.trim();
+    let cleaned = rawText.trim();
+    // Remove markdown code block wrappers like ```json ... ```
+    cleaned = cleaned.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       cleaned = jsonMatch[0];
@@ -155,6 +138,60 @@ CRITICAL SCIENTIFIC PACING & EVALUATION LOGIC:
     console.error('Gemini Activity Analysis Error:', error);
     return fallbackAnalysis(foodText, activityText, profile);
   }
+}
+
+/**
+ * Universal Gemini API caller with automatic model fallback (gemini-1.5-flash -> gemini-2.0-flash -> gemini-1.5-pro)
+ */
+async function queryGeminiAPI(
+  prompt: string,
+  maxTokens = 2500,
+  temperature = 0.2
+): Promise<string | null> {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) {
+    console.warn(
+      'Zero FIT: GEMINI_API_KEY is not configured in environment. Using evidence-based internal algorithms.'
+    );
+    return null;
+  }
+
+  for (const model of GEMINI_MODELS) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature,
+            maxOutputTokens: maxTokens,
+          },
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (candidateText) return candidateText.trim();
+      } else {
+        const errText = await response.text();
+        console.warn(`Zero FIT: Gemini API returned status ${response.status} for ${model}:`, errText);
+        // If 401 or 403, credentials are wrong, no need to retry other models
+        if (response.status === 401 || response.status === 403) {
+          console.error(
+            'Zero FIT: GEMINI_API_KEY is invalid or unauthorized. Please verify that your API key is created at https://aistudio.google.com/app/apikey (starts with "AIzaSy...").'
+          );
+          return null;
+        }
+      }
+    } catch (error: any) {
+      console.warn(`Zero FIT: Network error attempting Gemini model ${model}:`, error.message);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -260,28 +297,18 @@ User Context:
 User Question: "${query}"`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: systemPrompt }] }],
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 800,
-        },
-      }),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) return text.trim();
-    }
+    const reply = await queryGeminiAPI(systemPrompt, 1000, 0.4);
+    if (reply) return reply;
   } catch (err) {
     console.error('Gemini Chat Error:', err);
   }
 
-  // Fallback if network unavailable
+  // Fallback if offline or API key not yet configured
+  if (lang === 'pa') {
+    return 'ਇੱਕ ਸਥਾਈ ਫਿਟਨੈਸ ਯਾਤਰਾ 3 ਮੁੱਖ ਗੱਲਾਂ ’ਤੇ ਨਿਰਭਰ ਕਰਦੀ ਹੈ: (1) ਆਪਣੇ ਟੀਚੇ ਅਨੁਸਾਰ ਕੈਲੋਰੀ ਸੰਤੁਲਨ, (2) ਹਫ਼ਤੇ ਵਿੱਚ 3–4 ਦਿਨ ਜੋੜਾਂ ਲਈ ਸੁਰੱਖਿਅਤ ਕਸਰਤ, ਅਤੇ (3) ਪ੍ਰੋਟੀਨ ਦੀ ਪੂਰਤੀ (ਦਾਲਾਂ, ਪਨੀਰ, ਸੋਇਆ, ਆਂਡੇ) ਨਾਲ 7–8 ਘੰਟੇ ਦੀ ਚੰਗੀ ਨੀਂਦ।';
+  }
+  if (lang === 'hi') {
+    return 'एक टिकाऊ फिटनेस यात्रा 3 मुख्य स्तंभों पर आधारित है: (1) अपने लक्ष्य के अनुसार सही कैलोरी घाटा या अधिशेष, (2) जोड़ों को सुरक्षित रखते हुए सप्ताह में 3–4 दिन स्ट्रेंथ ट्रेनिंग, और (3) पर्याप्त प्रोटीन (दाल, पनीर, सोया, अंडे) के साथ 7–8 घंटे की नींद।';
+  }
   return 'A sustainable fitness journey relies on three pillars: (1) A consistent caloric balance tailored to your goal, (2) Progressive resistance training with joint-safe form 3–4 days per week, and (3) Reaching at least 1.4–1.8g/kg of protein alongside 7–8 hours of restorative sleep.';
 }
