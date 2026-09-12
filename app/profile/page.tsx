@@ -81,6 +81,11 @@ export default function ProfilePage() {
     difficulty: computedTargets.ageGroup === 'seniors' ? 'beginner' : 'intermediate',
   });
 
+  const calorieDiff = computedTargets.targetCalories - computedTargets.tdee;
+  const isDeficit = calorieDiff < 0;
+  const isSurplus = calorieDiff > 0;
+  const diffAbs = Math.abs(calorieDiff);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -511,64 +516,157 @@ export default function ProfilePage() {
           {/* TAB 1: BLUEPRINT TARGETS */}
           {activePlanTab === 'blueprint' && (
             <div className="space-y-5 animate-fadeIn">
-              <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/10 to-transparent p-6 rounded-2xl border border-emerald-500/30 space-y-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs uppercase font-bold text-emerald-800 dark:text-emerald-300 tracking-wider">
-                    Dynamic Biological Calibration
-                  </span>
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-600 text-white capitalize">
+              {/* Clean, Easy-to-Understand Calorie Equation Hub */}
+              <div className="bg-white dark:bg-slate-900 p-5 sm:p-6 rounded-2xl border border-emerald-500/30 shadow-md space-y-5">
+                
+                {/* Header with Title and Age Category */}
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div className="flex items-center space-x-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
+                      <Flame className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                        Daily Calorie Equation
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        Personalized for {formData.gender === 'female' ? 'Female' : 'Male'}, {formData.age} yrs • {formData.weightKg} kg ➔ {formData.targetWeightKg} kg
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 capitalize">
                     {computedTargets.ageGroup.replace('_', ' ')}
                   </span>
                 </div>
 
-                {/* Calories Banner */}
-                <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 text-center">
-                  <span className="text-xs uppercase font-bold text-slate-400">Target Daily Calories</span>
-                  <div className="text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-                    {computedTargets.targetCalories}{' '}
-                    <span className="text-xs font-normal text-slate-400">kcal</span>
+                {/* TOP ROW: Maintenance Burn vs Daily Adjustment (+ / -) */}
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  {/* Box 1: What Body Burns to Maintain */}
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block tracking-wider">
+                      1. Your Body Burns
+                    </span>
+                    <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-0.5">
+                      {computedTargets.tdee} <span className="text-xs font-semibold text-slate-400">kcal</span>
+                    </div>
+                    <span className="inline-block mt-1 text-[10px] font-semibold text-slate-500">
+                      To maintain {formData.weightKg} kg
+                    </span>
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    BMR: {computedTargets.bmr} kcal • TDEE: {computedTargets.tdee} kcal
+
+                  {/* Box 2: Deficit (-) or Surplus (+) in Big Bold Typography */}
+                  <div className={`p-3.5 rounded-xl border ${
+                    isDeficit
+                      ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50'
+                      : isSurplus
+                      ? 'bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800/50'
+                      : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/50'
+                  }`}>
+                    <span className={`text-[10px] uppercase font-bold block tracking-wider ${
+                      isDeficit
+                        ? 'text-amber-700 dark:text-amber-400'
+                        : isSurplus
+                        ? 'text-sky-700 dark:text-sky-400'
+                        : 'text-emerald-700 dark:text-emerald-400'
+                    }`}>
+                      2. Daily Adjustment
+                    </span>
+                    <div className={`text-xl sm:text-2xl font-black mt-0.5 ${
+                      isDeficit
+                        ? 'text-amber-600 dark:text-amber-400'
+                        : isSurplus
+                        ? 'text-sky-600 dark:text-sky-400'
+                        : 'text-emerald-600 dark:text-emerald-400'
+                    }`}>
+                      {isDeficit ? `- ${diffAbs}` : isSurplus ? `+ ${diffAbs}` : `± 0`}{' '}
+                      <span className="text-xs font-semibold">kcal</span>
+                    </div>
+                    <span className={`inline-block mt-1 text-[10px] font-bold uppercase tracking-wider ${
+                      isDeficit
+                        ? 'text-amber-700 dark:text-amber-300'
+                        : isSurplus
+                        ? 'text-sky-700 dark:text-sky-300'
+                        : 'text-emerald-700 dark:text-emerald-300'
+                    }`}>
+                      {isDeficit ? '🔥 Fat Loss Deficit' : isSurplus ? '⚡ Muscle Surplus' : '⚖️ Exact Balance'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* HERO BANNER: WHAT TO EAT EVERY DAY */}
+                <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg text-center space-y-2">
+                  <span className="text-[11px] uppercase font-black tracking-widest text-emerald-100 block">
+                    👉 Target: Eat This Every Day to Reach {computedTargets.targetWeightKg} kg
+                  </span>
+                  <div className="text-4xl sm:text-5xl font-black tracking-tight drop-shadow-sm">
+                    {computedTargets.targetCalories}{' '}
+                    <span className="text-base sm:text-lg font-bold text-emerald-100">kcal / day</span>
+                  </div>
+                  <p className="text-xs text-emerald-50 max-w-md mx-auto leading-relaxed pt-1">
+                    {isDeficit
+                      ? `Your body burns ${computedTargets.tdee} kcal every day. By eating ${computedTargets.targetCalories} kcal (a ${diffAbs} kcal deficit), your body is forced to burn stored body fat for energy.`
+                      : isSurplus
+                      ? `Your body burns ${computedTargets.tdee} kcal daily. Eating ${computedTargets.targetCalories} kcal (+${diffAbs} kcal surplus) supplies the extra fuel needed to build new muscle tissue.`
+                      : `Your body burns ${computedTargets.tdee} kcal daily. Eating ${computedTargets.targetCalories} kcal maintains your weight while body recomposition reshapes your physique.`}
                   </p>
                 </div>
 
-                {/* Macros Grid */}
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] uppercase font-bold text-emerald-600">Protein</span>
-                    <div className="text-lg font-black text-slate-900 dark:text-white">
-                      {computedTargets.proteinGrams}g
+                {/* RESTING BMR NOTE (Simple translation for everyday users) */}
+                <div className="flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <span>Resting Burn (Calories burned at complete rest in bed):</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{computedTargets.bmr} kcal</span>
+                </div>
+
+                {/* MACROS BREAKDOWN */}
+                <div className="space-y-2">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                    Your Daily Macronutrient Split:
+                  </span>
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] uppercase font-bold text-emerald-600 block">Protein</span>
+                      <div className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                        {computedTargets.proteinGrams}g
+                      </div>
+                      <span className="text-[10px] text-slate-400">
+                        {Math.round(computedTargets.proteinGrams * 4)} kcal
+                      </span>
                     </div>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] uppercase font-bold text-sky-600">Carbs</span>
-                    <div className="text-lg font-black text-slate-900 dark:text-white">
-                      {computedTargets.carbGrams}g
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] uppercase font-bold text-sky-600 block">Carbs</span>
+                      <div className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                        {computedTargets.carbGrams}g
+                      </div>
+                      <span className="text-[10px] text-slate-400">
+                        {Math.round(computedTargets.carbGrams * 4)} kcal
+                      </span>
                     </div>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] uppercase font-bold text-amber-600">Fats</span>
-                    <div className="text-lg font-black text-slate-900 dark:text-white">
-                      {computedTargets.fatGrams}g
+                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
+                      <span className="text-[10px] uppercase font-bold text-amber-600 block">Fats</span>
+                      <div className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                        {computedTargets.fatGrams}g
+                      </div>
+                      <span className="text-[10px] text-slate-400">
+                        {Math.round(computedTargets.fatGrams * 9)} kcal
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Water & BMI */}
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center space-x-2">
-                    <Droplet className="w-4 h-4 text-cyan-500" />
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center space-x-2.5">
+                    <Droplet className="w-4 h-4 text-cyan-500 flex-shrink-0" />
                     <div>
                       <span className="text-slate-400 text-[10px] uppercase block">Water Intake</span>
                       <span className="font-bold text-slate-900 dark:text-white">
-                        {computedTargets.waterIntakeLiters} Liters/day
+                        {computedTargets.waterIntakeLiters} Liters / day
                       </span>
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center space-x-2">
-                    <Scale className="w-4 h-4 text-emerald-500" />
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center space-x-2.5">
+                    <Scale className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                     <div>
                       <span className="text-slate-400 text-[10px] uppercase block">BMI Status</span>
                       <span className="font-bold text-slate-900 dark:text-white capitalize">
@@ -577,6 +675,7 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 </div>
+
               </div>
 
               {/* Program Timeline */}
