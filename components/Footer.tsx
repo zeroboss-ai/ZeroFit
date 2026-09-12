@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
-import { Dumbbell, ShieldAlert, Heart, Mail, CheckCircle, ExternalLink } from 'lucide-react';
+import { Dumbbell, ShieldAlert, Heart, Mail, CheckCircle, ExternalLink, Sparkles, LineChart, ShieldCheck } from 'lucide-react';
 
 export default function Footer() {
   const { t } = useApp();
@@ -83,98 +83,86 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Col 2: Hub & Education */}
+          {/* Col 2: Pillar 1 - Personalized Plan */}
           <div>
-            <h4 className="text-xs uppercase tracking-wider font-bold text-white mb-4">
-              Knowledge Hub
+            <h4 className="text-xs uppercase tracking-wider font-bold text-white mb-4 flex items-center space-x-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Personalized Plan</span>
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
-                <Link href="/knowledge?category=punjabi_indian" className="hover:text-emerald-400 transition-colors">
-                  Punjabi & Indian Diets
-                </Link>
-              </li>
-              <li>
-                <Link href="/knowledge?category=fat_loss" className="hover:text-emerald-400 transition-colors">
-                  Fat Loss Science & Calorie Deficit
-                </Link>
-              </li>
-              <li>
-                <Link href="/knowledge?category=muscle_gain" className="hover:text-emerald-400 transition-colors">
-                  Muscle Hypertrophy & Progressive Overload
-                </Link>
-              </li>
-              <li>
-                <Link href="/knowledge?category=conditions" className="hover:text-emerald-400 transition-colors">
-                  PCOS, Thyroid & Diabetes Nutrition
-                </Link>
-              </li>
-              <li>
-                <Link href="/knowledge?category=supplements" className="hover:text-emerald-400 transition-colors">
-                  Creatine & Whey Supplement Safety
-                </Link>
-              </li>
-              <li>
-                <Link href="/knowledge?category=mobility" className="hover:text-emerald-400 transition-colors">
-                  45+ Senior Joint Care & Mobility
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Col 3: Tools & Generators */}
-          <div>
-            <h4 className="text-xs uppercase tracking-wider font-bold text-white mb-4">
-              Generators & Tools
-            </h4>
-            <ul className="space-y-2 text-xs">
-              <li>
-                <Link href="/diet-plans" className="hover:text-emerald-400 transition-colors">
-                  Personalized Diet Generator
-                </Link>
-              </li>
-              <li>
-                <Link href="/workout-plans" className="hover:text-emerald-400 transition-colors">
-                  Home & Gym Workout Planner
-                </Link>
-              </li>
-              <li>
-                <Link href="/calculators" className="hover:text-emerald-400 transition-colors">
-                  BMR & TDEE (Mifflin-St Jeor)
-                </Link>
-              </li>
-              <li>
-                <Link href="/calculators" className="hover:text-emerald-400 transition-colors">
-                  Interactive BMI Assessment
-                </Link>
-              </li>
-              <li>
-                <Link href="/calculators" className="hover:text-emerald-400 transition-colors">
-                  Hydration & Water Intake
-                </Link>
-              </li>
-              <li>
-                <Link href="/progress" className="hover:text-emerald-400 transition-colors">
-                  Weight & Measurement Tracker
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Col 4: Platform */}
-          <div>
-            <h4 className="text-xs uppercase tracking-wider font-bold text-white mb-4">
-              Platform & Safety
-            </h4>
-            <ul className="space-y-2 text-xs">
-              <li>
-                <Link href="/about" className="hover:text-emerald-400 transition-colors">
-                  About Zero FIT Philosophy
+                <Link href="/profile" className="hover:text-emerald-400 transition-colors font-medium">
+                  Build Custom Blueprint
                 </Link>
               </li>
               <li>
                 <Link href="/profile" className="hover:text-emerald-400 transition-colors">
-                  Personal Profile & Onboarding
+                  Indian & Punjabi Meal Plans
+                </Link>
+              </li>
+              <li>
+                <Link href="/profile" className="hover:text-emerald-400 transition-colors">
+                  Joint-Safe 45+ Workout Routine
+                </Link>
+              </li>
+              <li>
+                <Link href="/profile" className="hover:text-emerald-400 transition-colors">
+                  BMR, TDEE & Macro Targets
+                </Link>
+              </li>
+              <li>
+                <Link href="/profile" className="hover:text-emerald-400 transition-colors">
+                  Export / Print PDF Blueprint
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Col 3: Pillar 2 - Progress Tracker */}
+          <div>
+            <h4 className="text-xs uppercase tracking-wider font-bold text-white mb-4 flex items-center space-x-1.5">
+              <LineChart className="w-3.5 h-3.5 text-sky-400" />
+              <span>Progress Tracker</span>
+            </h4>
+            <ul className="space-y-2 text-xs">
+              <li>
+                <Link href="/progress" className="hover:text-emerald-400 transition-colors font-medium">
+                  Daily Check-in Dashboard
+                </Link>
+              </li>
+              <li>
+                <Link href="/progress" className="hover:text-emerald-400 transition-colors">
+                  Gemini AI Food & Macro Logger
+                </Link>
+              </li>
+              <li>
+                <Link href="/progress" className="hover:text-emerald-400 transition-colors">
+                  Weight & Deficit Trajectory
+                </Link>
+              </li>
+              <li>
+                <Link href="/progress" className="hover:text-emerald-400 transition-colors">
+                  Daily Water & Workout Logs
+                </Link>
+              </li>
+              <li>
+                <Link href="/progress" className="hover:text-emerald-400 transition-colors">
+                  Consistency Streaks & History
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Col 4: Platform & Safety */}
+          <div>
+            <h4 className="text-xs uppercase tracking-wider font-bold text-white mb-4 flex items-center space-x-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Evidence & Safety</span>
+            </h4>
+            <ul className="space-y-2 text-xs">
+              <li>
+                <Link href="/about" className="hover:text-emerald-400 transition-colors">
+                  Zero FIT Philosophy
                 </Link>
               </li>
               <li>
@@ -184,7 +172,12 @@ export default function Footer() {
               </li>
               <li>
                 <Link href="/about#contact" className="hover:text-emerald-400 transition-colors">
-                  Contact Support & Coaching
+                  Contact & Coaching Inquiries
+                </Link>
+              </li>
+              <li>
+                <Link href="/login" className="hover:text-emerald-400 transition-colors">
+                  Account Sign In / Register
                 </Link>
               </li>
             </ul>

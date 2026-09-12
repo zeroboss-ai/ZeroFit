@@ -29,12 +29,28 @@ export default function Navbar() {
   const pathname = usePathname();
 
   const navLinks = [
-    { href: '/', label: t.home, icon: Dumbbell },
-    { href: '/knowledge', label: t.knowledgeHub, icon: BookOpen },
-    { href: '/diet-plans', label: t.dietPlans, icon: Utensils },
-    { href: '/workout-plans', label: t.workoutPlans, icon: Flame },
-    { href: '/calculators', label: t.calculators, icon: Calculator },
-    { href: '/progress', label: t.progressTracker, icon: LineChart },
+    {
+      href: '/profile',
+      label:
+        lang === 'pa'
+          ? 'ਆਪਣਾ ਪਰਸਨਲਾਈਜ਼ਡ ਪਲੈਨ ਲਵੋ'
+          : lang === 'hi'
+          ? 'अपना पर्सनलाइज़्ड प्लान लें'
+          : 'Get Your Personalized Plan',
+      icon: Sparkles,
+      highlight: true,
+    },
+    {
+      href: '/progress',
+      label:
+        lang === 'pa'
+          ? 'ਪ੍ਰੋਗਰੈਸ ਟਰੈਕਰ'
+          : lang === 'hi'
+          ? 'प्रोग्रेस ट्रैकर'
+          : 'Progress Tracker',
+      icon: LineChart,
+      highlight: false,
+    },
   ];
 
   const languages = [
@@ -48,7 +64,7 @@ export default function Navbar() {
       {/* Top micro banner */}
       <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white text-xs py-1 px-4 text-center font-medium flex items-center justify-center space-x-2">
         <Shield className="w-3.5 h-3.5 inline" />
-        <span>Evidence-Based Guidance • Tailored for Punjabi & Indian Lifestyles • 100% Free Calculators</span>
+        <span>Evidence-Based Indian & Punjabi Fitness • Personalized Nutrition & Joint-Safe Workouts</span>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
