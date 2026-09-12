@@ -409,30 +409,58 @@ export function parsePhysicalActivity(
   let totalBurn = 0;
 
   for (const seg of segments) {
-    const lower = seg.toLowerCase();
-    const durationMatch = lower.match(/(\d+)\s*(m|min|mins|minutes|h|hr|hours)/);
-    let mins = 30;
-    if (durationMatch) {
-      const val = parseInt(durationMatch[1]);
-      const unit = durationMatch[2];
-      mins = unit.startsWith('h') ? val * 60 : val;
+    const lower = seg.toLowerCase().trim();
+
+    // 1. Check for Sprints / Interval Dash (e.g., "7 sprint 70m", "5 sprints 100m", "10 sprints")
+    if (lower.includes('sprint')) {
+      const sprintCountMatch = lower.match(/(\d+)\s*(?:x\s*)?sprint/);
+      const sprintCount = sprintCountMatch ? parseInt(sprintCountMatch[1]) : 5;
+      const distMatch = lower.match(/sprint[s]?\s*(\d+)\s*(?:m|meter|meters)?/);
+      const dist = distMatch ? distMatch[1] : '70';
+      // High-intensity interval burst + recovery walking (~13 kcal per rep for ~85kg)
+      const burn = Math.round(sprintCount * 13 * (userWeightKg / 80));
+      items.push({
+        name: seg,
+        durationOrMetric: `${sprintCount} sprints (${dist}m each)`,
+        caloriesBurned: burn,
+      });
+      totalBurn += burn;
+      continue;
     }
 
+    // 2. Check for Steps (e.g., "10000 steps daily walk", "5,000 steps")
     const stepMatch = lower.match(/([\d,]+)\s*steps/);
-
     if (stepMatch) {
       const steps = parseInt(stepMatch[1].replace(/,/g, ''));
-      // ~0.045 kcal per step for ~80kg body
-      const burn = Math.round(steps * 0.045 * (userWeightKg / 80));
+      // ~0.042 kcal per step for 80kg body (10,000 steps ≈ 420-470 kcal for 80-90kg)
+      const burn = Math.round(steps * 0.042 * (userWeightKg / 80));
       items.push({
         name: seg,
         durationOrMetric: `${steps.toLocaleString()} steps`,
         caloriesBurned: burn,
       });
       totalBurn += burn;
-    } else if (lower.includes('gym') || lower.includes('push') || lower.includes('pull') || lower.includes('leg') || lower.includes('lift') || lower.includes('chest')) {
-      // Resistance training MET ~ 6.0
-      const burn = Math.round((6.0 * 3.5 * userWeightKg / 200) * mins);
+      continue;
+    }
+
+    // 3. Extract Duration in minutes (handling "45 mins", "45m workout", "1 hr", while avoiding "70m" distance)
+    let mins = 30;
+    const explicitMinMatch = lower.match(/(\d+)\s*(min|mins|minute|minutes)/);
+    const hrMatch = lower.match(/(\d+(?:\.\d+)?)\s*(h|hr|hrs|hour|hours)/);
+    const shortPrefixMatch = lower.match(/^(\d{1,2})m\s+/); // "45m Push Workout"
+
+    if (explicitMinMatch) {
+      mins = parseInt(explicitMinMatch[1]);
+    } else if (hrMatch) {
+      mins = Math.round(parseFloat(hrMatch[1]) * 60);
+    } else if (shortPrefixMatch) {
+      mins = parseInt(shortPrefixMatch[1]);
+    }
+
+    // 4. Calculate sports-science MET burn based on activity type
+    if (lower.includes('gym') || lower.includes('push') || lower.includes('pull') || lower.includes('leg') || lower.includes('lift') || lower.includes('chest')) {
+      // Resistance training with rest intervals: MET ~ 5.0
+      const burn = Math.round(((5.0 * 3.5 * userWeightKg) / 200) * mins);
       items.push({
         name: seg,
         durationOrMetric: `${mins} mins`,
@@ -440,17 +468,17 @@ export function parsePhysicalActivity(
       });
       totalBurn += burn;
     } else if (lower.includes('run') || lower.includes('jog')) {
-      // Running MET ~ 8.5
-      const burn = Math.round((8.5 * 3.5 * userWeightKg / 200) * mins);
+      // Running / Jogging: MET ~ 8.0
+      const burn = Math.round(((8.0 * 3.5 * userWeightKg) / 200) * mins);
       items.push({
         name: seg,
         durationOrMetric: `${mins} mins`,
         caloriesBurned: burn,
       });
       totalBurn += burn;
-    } else if (lower.includes('home workout') || lower.includes('bodyweight') || lower.includes('hiit')) {
-      // Bodyweight / HIIT MET ~ 5.5
-      const burn = Math.round((5.5 * 3.5 * userWeightKg / 200) * mins);
+    } else if (lower.includes('home workout') || lower.includes('bodyweight') || lower.includes('hiit') || lower.includes('calisthenic')) {
+      // Bodyweight / HIIT: MET ~ 5.5
+      const burn = Math.round(((5.5 * 3.5 * userWeightKg) / 200) * mins);
       items.push({
         name: seg,
         durationOrMetric: `${mins} mins`,
@@ -458,8 +486,8 @@ export function parsePhysicalActivity(
       });
       totalBurn += burn;
     } else if (lower.includes('walk')) {
-      // Brisk walk MET ~ 3.5
-      const burn = Math.round((3.5 * 3.5 * userWeightKg / 200) * mins);
+      // Brisk walking: MET ~ 3.5
+      const burn = Math.round(((3.5 * 3.5 * userWeightKg) / 200) * mins);
       items.push({
         name: seg,
         durationOrMetric: `${mins} mins`,
@@ -467,8 +495,8 @@ export function parsePhysicalActivity(
       });
       totalBurn += burn;
     } else if (lower.includes('mobility') || lower.includes('stretch') || lower.includes('yoga')) {
-      // Mobility MET ~ 2.5
-      const burn = Math.round((2.5 * 3.5 * userWeightKg / 200) * mins);
+      // Mobility: MET ~ 2.5
+      const burn = Math.round(((2.5 * 3.5 * userWeightKg) / 200) * mins);
       items.push({
         name: seg,
         durationOrMetric: `${mins} mins`,
@@ -476,8 +504,8 @@ export function parsePhysicalActivity(
       });
       totalBurn += burn;
     } else {
-      // Generic exercise
-      const burn = Math.round((4.0 * 3.5 * userWeightKg / 200) * mins);
+      // General exercise: MET ~ 4.0
+      const burn = Math.round(((4.0 * 3.5 * userWeightKg) / 200) * mins);
       items.push({
         name: seg,
         durationOrMetric: `${mins} mins`,

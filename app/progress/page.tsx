@@ -802,16 +802,18 @@ export default function ProgressTrackerPage() {
                 <span className="text-2xl font-black text-orange-600 dark:text-orange-400 mt-0.5 block">
                   {Math.round(aiAnalysisResult.caloriesBurned)} <span className="text-xs font-medium text-orange-400">kcal</span>
                 </span>
-                <span className="text-[10px] text-slate-400 mt-1 block">Gym + Running + NEAT</span>
+                <span className="text-[10px] text-slate-400 mt-1 block">BMR + NEAT + Workouts</span>
               </div>
 
               {/* Net Calories */}
               <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Net Energy Balance</span>
                 <span className="text-2xl font-black text-slate-900 dark:text-white mt-0.5 block">
-                  {Math.round(aiAnalysisResult.netCalories)} <span className="text-xs font-medium text-slate-400">kcal</span>
+                  {Math.round(aiAnalysisResult.netCalories) > 0 ? `+${Math.round(aiAnalysisResult.netCalories)}` : Math.round(aiAnalysisResult.netCalories)} <span className="text-xs font-medium text-slate-400">kcal</span>
                 </span>
-                <span className="text-[10px] text-slate-400 mt-1 block">Consumed minus Burned</span>
+                <span className={`text-[10px] font-bold mt-1 block ${aiAnalysisResult.netCalories < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                  {aiAnalysisResult.netCalories < 0 ? `Deficit: ${Math.abs(Math.round(aiAnalysisResult.netCalories))} kcal` : `Surplus: +${Math.round(aiAnalysisResult.netCalories)} kcal`}
+                </span>
               </div>
 
               {/* Target Calories */}

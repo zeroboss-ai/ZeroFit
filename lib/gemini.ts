@@ -218,27 +218,36 @@ function fallbackAnalysis(
   const estimatedCarbs = parsedFood.totalCarbs > 0 ? parsedFood.totalCarbs : 210;
   const estimatedFats = parsedFood.totalFats > 0 ? parsedFood.totalFats : 55;
 
-  // Base daily expenditure (Maintenance TDEE or BMR + activity)
+  // Base daily expenditure (BMR + Sedentary NEAT + Logged Exercise)
+  // NOTE: We do NOT add workoutBurn on top of TDEE because TDEE already has exercise multipliers built in.
   const bmrEstimate = profile.bmr || Math.round(10 * currentWeight + 6.25 * 175 - 5 * 28 + 5);
-  const dailyBaseBurn = tdee > bmrEstimate ? tdee : Math.round(bmrEstimate * 1.35);
+  const sedentaryBaseline = Math.round(bmrEstimate * 1.15); // Resting burn + basic desk activities / TEF digestion
   const workoutBurn = parsedAct.totalBurn;
-  const totalBurned = dailyBaseBurn + workoutBurn;
+
+  // If workouts/steps were logged, Total Burn = Sedentary Base + Specific Workouts.
+  // If no workouts were logged, default to standard maintenance TDEE.
+  let totalBurned = workoutBurn > 0 ? sedentaryBaseline + workoutBurn : tdee;
+
+  // Physiological cap for non-extreme training
+  const maxRealisticBurn = Math.round(bmrEstimate * 2.1);
+  if (totalBurned > maxRealisticBurn) {
+    totalBurned = maxRealisticBurn;
+  }
+
   const netCalories = estimatedCals - totalBurned;
 
   // SCIENTIFIC EVALUATION:
   // Target calories is the user's deficit target (e.g. 2,289 kcal vs 2,934 kcal burn).
-  // If consumed calories are within ±150 kcal of target, they are in the OPTIMAL SWEET SPOT.
-  // If consumed calories exceed target by > 200 kcal, they are in a SURPLUS (fat loss stalled).
   let pacingRecommendation: 'deploy_more_effort' | 'go_slow_recover' | 'optimal_pace' = 'optimal_pace';
   let pacingTitle = '🎯 Optimal Sweet Spot: On-Track Deficit & Progress';
-  let pacingExplanation = `Your estimated intake of ${estimatedCals} kcal with ~${totalBurned} kcal total expenditure is right on target for healthy fat loss. Protein (${estimatedProtein}g) supports muscle retention.`;
+  let pacingExplanation = `Your estimated intake of ${estimatedCals} kcal with ~${totalBurned} kcal total expenditure creates an effective fat-loss deficit. Protein (${estimatedProtein}g) supports muscle retention.`;
 
   const calorieDelta = estimatedCals - targetCalories;
 
   if (calorieDelta > 200) {
     pacingRecommendation = 'deploy_more_effort';
     pacingTitle = `⚠️ Deploy More Effort: +${calorieDelta} kcal Over Deficit Target`;
-    pacingExplanation = `Your intake of ${estimatedCals} kcal exceeds your target of ${targetCalories} kcal by +${calorieDelta} kcal. This eliminates your fat-loss deficit. To hit your target, moderate calorie-dense foods (parathas, sugary tea, extra rotis) and add a 25-minute brisk walk.`;
+    pacingExplanation = `Your intake of ${estimatedCals} kcal exceeds your target of ${targetCalories} kcal by +${calorieDelta} kcal. Today's net energy deficit is ${Math.abs(netCalories)} kcal (vs your ideal ${Math.round(tdee - targetCalories)} kcal fat-loss target). To stay on track, moderate calorie-dense foods (parathas, sugary tea) and add a brisk post-meal walk.`;
   } else if (estimatedCals < 1250) {
     pacingRecommendation = 'go_slow_recover';
     pacingTitle = '🧘 Go Slow & Refuel: Critical Undereating Alert';
