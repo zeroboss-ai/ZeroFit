@@ -41,6 +41,7 @@ import {
   FileDown,
 } from 'lucide-react';
 import MedicalDisclaimer from '@/components/MedicalDisclaimer';
+import CustomSelect from '@/components/CustomSelect';
 
 export default function ProfilePage() {
   const { user, profile, setProfile, lang, isDark } = useApp();
@@ -184,16 +185,15 @@ export default function ProfilePage() {
                 <label className="font-bold text-slate-600 dark:text-slate-400 block mb-1">
                   Gender
                 </label>
-                <select
-                  value={formData.gender}
-                  onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
-                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
-                >
-                  <option value="male" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">Male</option>
-                  <option value="female" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">Female</option>
-                  <option value="other" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">Other</option>
-                </select>
+                <CustomSelect
+                  value={formData.gender || 'male'}
+                  onChange={(val) => setFormData({ ...formData, gender: val as any })}
+                  options={[
+                    { value: 'male', label: 'Male' },
+                    { value: 'female', label: 'Female' },
+                    { value: 'other', label: 'Other' },
+                  ]}
+                />
               </div>
 
               <div>
@@ -268,119 +268,78 @@ export default function ProfilePage() {
                 <label className="font-bold text-slate-600 dark:text-slate-400 block mb-1">
                   Primary Fitness Objective
                 </label>
-                <select
-                  value={formData.goal}
-                  onChange={(e) => setFormData({ ...formData, goal: e.target.value as FitnessGoal })}
-                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
-                >
-                  <option value="lose_fat" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Lose Body Fat (Calorie Deficit & EPOC Burn)
-                  </option>
-                  <option value="gain_muscle" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Build Muscle (Lean Hypertrophy & Progressive Overload)
-                  </option>
-                  <option value="maintain" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Body Recomposition (Fat Cut + Muscle Preservation)
-                  </option>
-                  <option value="general_health" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Longevity, Mobility & Heart Health
-                  </option>
-                </select>
+                <CustomSelect
+                  value={formData.goal || 'lose_fat'}
+                  onChange={(val) => setFormData({ ...formData, goal: val as FitnessGoal })}
+                  options={[
+                    { value: 'lose_fat', label: 'Lose Body Fat (Calorie Deficit & EPOC Burn)' },
+                    { value: 'gain_muscle', label: 'Build Muscle (Lean Hypertrophy & Progressive Overload)' },
+                    { value: 'maintain', label: 'Body Recomposition (Fat Cut + Muscle Preservation)' },
+                    { value: 'general_health', label: 'Longevity, Mobility & Heart Health' },
+                  ]}
+                />
               </div>
 
               <div>
                 <label className="font-bold text-slate-600 dark:text-slate-400 block mb-1">
                   Daily Physical Activity
                 </label>
-                <select
-                  value={formData.activityLevel}
-                  onChange={(e) => setFormData({ ...formData, activityLevel: e.target.value as ActivityLevel })}
-                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
-                >
-                  <option value="sedentary" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Sedentary (Desk Job, minimal exercise)
-                  </option>
-                  <option value="light" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Lightly Active (1–3 workout days/week)
-                  </option>
-                  <option value="moderate" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Moderately Active (3–5 workout days/week)
-                  </option>
-                  <option value="very_active" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Very Active (6–7 workout days/week)
-                  </option>
-                  <option value="extra_active" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Extremely Active (Athletic labor / 2x daily training)
-                  </option>
-                </select>
+                <CustomSelect
+                  value={formData.activityLevel || 'moderate'}
+                  onChange={(val) => setFormData({ ...formData, activityLevel: val as ActivityLevel })}
+                  options={[
+                    { value: 'sedentary', label: 'Sedentary (Desk Job, minimal exercise)' },
+                    { value: 'light', label: 'Lightly Active (1–3 workout days/week)' },
+                    { value: 'moderate', label: 'Moderately Active (3–5 workout days/week)' },
+                    { value: 'very_active', label: 'Very Active (6–7 workout days/week)' },
+                    { value: 'extra_active', label: 'Extremely Active (Athletic labor / 2x daily training)' },
+                  ]}
+                />
               </div>
 
               <div>
                 <label className="font-bold text-slate-600 dark:text-slate-400 block mb-1">
                   Dietary Pattern
                 </label>
-                <select
-                  value={formData.dietPreference}
-                  onChange={(e) => setFormData({ ...formData, dietPreference: e.target.value as DietaryPreference })}
-                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
-                >
-                  <option value="veg" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Vegetarian (Lacto-Veg: Dal, Paneer, Curd)
-                  </option>
-                  <option value="non_veg" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Non-Vegetarian (Chicken, Fish, Eggs)
-                  </option>
-                  <option value="eggetarian" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Eggetarian (Vegetarian + Eggs)
-                  </option>
-                  <option value="vegan" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Vegan (100% Plant-Based: Soya, Tofu, Legumes)
-                  </option>
-                </select>
+                <CustomSelect
+                  value={formData.dietPreference || 'veg'}
+                  onChange={(val) => setFormData({ ...formData, dietPreference: val as DietaryPreference })}
+                  options={[
+                    { value: 'veg', label: 'Vegetarian (Lacto-Veg: Dal, Paneer, Curd)' },
+                    { value: 'non_veg', label: 'Non-Vegetarian (Chicken, Fish, Eggs)' },
+                    { value: 'eggetarian', label: 'Eggetarian (Vegetarian + Eggs)' },
+                    { value: 'vegan', label: 'Vegan (100% Plant-Based: Soya, Tofu, Legumes)' },
+                  ]}
+                />
               </div>
 
               <div>
                 <label className="font-bold text-slate-600 dark:text-slate-400 block mb-1">
                   Cuisine Tradition
                 </label>
-                <select
-                  value={formData.cuisinePreference}
-                  onChange={(e) => setFormData({ ...formData, cuisinePreference: e.target.value as CuisinePreference })}
-                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
-                >
-                  <option value="north_indian" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    North Indian / Punjabi (Roti, Dal, Paneer, Sabzi)
-                  </option>
-                  <option value="south_indian" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    South Indian (Idli, Dosa, Sambar, Rasam, Rice)
-                  </option>
-                  <option value="continental" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Continental / Global (Oats, Salads, Protein Bowls)
-                  </option>
-                </select>
+                <CustomSelect
+                  value={formData.cuisinePreference || 'north_indian'}
+                  onChange={(val) => setFormData({ ...formData, cuisinePreference: val as CuisinePreference })}
+                  options={[
+                    { value: 'north_indian', label: 'North Indian / Punjabi (Roti, Dal, Paneer, Sabzi)' },
+                    { value: 'south_indian', label: 'South Indian (Idli, Dosa, Sambar, Rasam, Rice)' },
+                    { value: 'continental', label: 'Continental / Global (Oats, Salads, Protein Bowls)' },
+                  ]}
+                />
               </div>
 
               <div className="sm:col-span-2">
                 <label className="font-bold text-slate-600 dark:text-slate-400 block mb-1">
                   Workout Location & Available Equipment
                 </label>
-                <select
+                <CustomSelect
                   value={formData.workoutEnvironment || 'gym'}
-                  onChange={(e) => setFormData({ ...formData, workoutEnvironment: e.target.value as 'gym' | 'home' })}
-                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
-                >
-                  <option value="gym" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Gym Setup (Dumbbells, Barbells, Cables & Machines)
-                  </option>
-                  <option value="home" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
-                    Home Workout (Bodyweight, Resistance Bands & Minimal Equipment)
-                  </option>
-                </select>
+                  onChange={(val) => setFormData({ ...formData, workoutEnvironment: val as 'gym' | 'home' })}
+                  options={[
+                    { value: 'gym', label: 'Gym Setup (Dumbbells, Barbells, Cables & Machines)' },
+                    { value: 'home', label: 'Home Workout (Bodyweight, Resistance Bands & Minimal Equipment)' },
+                  ]}
+                />
               </div>
             </div>
           </div>

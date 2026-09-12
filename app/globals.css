@@ -21,31 +21,10 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
-  /* Native Form Controls & Dropdowns in Both Light and Dark Theme */
-  input,
-  select,
-  textarea {
-    color-scheme: light;
-  }
-
+  /* Native Form Controls in Dark Theme */
   html.dark input,
-  html.dark select,
-  html.dark textarea,
-  .dark input,
-  .dark select,
-  .dark textarea {
+  html.dark textarea {
     color-scheme: dark;
-  }
-
-  select option {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-  }
-
-  html.dark select option,
-  .dark select option {
-    background-color: #0f172a !important;
-    color: #f8fafc !important;
   }
 
   /* Date / calendar picker indicator visibility in dark mode */
