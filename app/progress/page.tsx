@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import type { ActivityAnalysisResult } from '@/lib/gemini';
 import MedicalDisclaimer from '@/components/MedicalDisclaimer';
+import { parseFoodIntake, parsePhysicalActivity } from '@/lib/nutrition-parser';
 
 export default function ProgressTrackerPage() {
   const { user, profile, t } = useApp();
@@ -86,6 +87,17 @@ export default function ProgressTrackerPage() {
   const [aiAnalysisResult, setAiAnalysisResult] = useState<ActivityAnalysisResult | null>(null);
   const [aiError, setAiError] = useState<string>('');
   const [appliedNotice, setAppliedNotice] = useState<boolean>(false);
+  // Live reactive sports-science estimation as the user types
+  const liveParsedFood = React.useMemo(() => {
+    return parseFoodIntake(aiFoodInput);
+  }, [aiFoodInput]);
+
+  const liveParsedAct = React.useMemo(() => {
+    const w = parseFloat(weightKg) || effectiveProfile?.weightKg || 75;
+    return parsePhysicalActivity(aiActivityInput, w);
+  }, [aiActivityInput, weightKg, effectiveProfile]);
+
+  const hasLiveInputs = Boolean(aiFoodInput.trim() || aiActivityInput.trim());
 
   const handleAutoCalculateAndSaveCheckin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -709,6 +721,31 @@ export default function ProgressTrackerPage() {
             </div>
           </div>
         </div>
+
+        {/* Live Instant Calculation Preview */}
+        {hasLiveInputs && (
+          <div className="p-4 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 space-y-2 animate-fadeIn">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                <span>Live Instant Sports-Science Estimate:</span>
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200">
+                Live Calculation
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-100 dark:border-slate-800 font-bold text-slate-900 dark:text-white shadow-sm">
+                🍴 <span className="text-emerald-600">{liveParsedFood.totalCalories} kcal</span> ({liveParsedFood.items.length} food items) • P: {liveParsedFood.totalProtein}g • C: {liveParsedFood.totalCarbs}g • F: {liveParsedFood.totalFats}g
+              </div>
+              {liveParsedAct.totalBurn > 0 && (
+                <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-100 dark:border-slate-800 font-bold text-orange-600 dark:text-orange-400 shadow-sm">
+                  ⚡ ~{liveParsedAct.totalBurn} kcal workout burn ({liveParsedAct.items.length} activities)
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Action Trigger Button */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">

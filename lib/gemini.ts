@@ -1,4 +1,5 @@
 import { UserProfile, Language } from '@/types';
+import { parseFoodIntake, parsePhysicalActivity } from './nutrition-parser';
 
 export const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY?.trim() || '';
@@ -205,55 +206,43 @@ function fallbackAnalysis(
   const currentWeight = profile.weightKg || 75;
   const targetCalories = profile.targetCalories || 2000;
   const targetProtein = profile.proteinGrams || 140;
+  const tdee = profile.tdee || Math.round(targetCalories * 1.25);
 
-  // Basic estimation from text length and common keywords
-  let estimatedCals = 1800;
-  let estimatedProtein = 85;
-  let estimatedCarbs = 210;
-  let estimatedFats = 55;
+  // Parse natural language foods with exact quantities, Indian & international dishes
+  const parsedFood = parseFoodIntake(foodText);
+  // Parse physical activity with METs scaled by body weight
+  const parsedAct = parsePhysicalActivity(activityText, currentWeight);
 
-  const lowerFood = foodText.toLowerCase();
-  if (lowerFood.includes('paneer')) { estimatedProtein += 20; estimatedCals += 150; }
-  if (lowerFood.includes('soya')) { estimatedProtein += 25; estimatedCals += 120; }
-  if (lowerFood.includes('whey') || lowerFood.includes('protein')) { estimatedProtein += 24; estimatedCals += 130; }
-  if (lowerFood.includes('egg') || lowerFood.includes('chicken')) { estimatedProtein += 30; estimatedCals += 200; }
-  if (lowerFood.includes('roti') || lowerFood.includes('rice')) { estimatedCarbs += 60; estimatedCals += 250; }
+  const estimatedCals = parsedFood.totalCalories > 0 ? parsedFood.totalCalories : 1800;
+  const estimatedProtein = parsedFood.totalProtein > 0 ? parsedFood.totalProtein : 85;
+  const estimatedCarbs = parsedFood.totalCarbs > 0 ? parsedFood.totalCarbs : 210;
+  const estimatedFats = parsedFood.totalFats > 0 ? parsedFood.totalFats : 55;
 
-  // Activity burn estimation
-  const lowerAct = activityText.toLowerCase();
-  let workoutBurn = 0;
-  const activityItems: Array<{ name: string; durationOrMetric: string; caloriesBurned: number }> = [];
-
-  if (lowerAct.includes('gym') || lowerAct.includes('workout') || lowerAct.includes('lift')) {
-    workoutBurn += 280;
-    activityItems.push({ name: 'Resistance / Gym Training', durationOrMetric: '45 mins', caloriesBurned: 280 });
-  }
-  if (lowerAct.includes('run') || lowerAct.includes('jog')) {
-    workoutBurn += 220;
-    activityItems.push({ name: 'Running / Jogging', durationOrMetric: '20 mins', caloriesBurned: 220 });
-  }
-  if (lowerAct.includes('walk') || lowerAct.includes('step')) {
-    workoutBurn += 180;
-    activityItems.push({ name: 'Brisk Walking & Steps', durationOrMetric: '6,000 steps', caloriesBurned: 180 });
-  }
-
-  // Base BMR daily expenditure portion
-  const bmrEstimate = Math.round(10 * currentWeight + 6.25 * 175 - 5 * 28 + 5);
-  const totalBurned = bmrEstimate + (workoutBurn || 250);
+  // Base daily expenditure (Maintenance TDEE or BMR + activity)
+  const bmrEstimate = profile.bmr || Math.round(10 * currentWeight + 6.25 * 175 - 5 * 28 + 5);
+  const dailyBaseBurn = tdee > bmrEstimate ? tdee : Math.round(bmrEstimate * 1.35);
+  const workoutBurn = parsedAct.totalBurn;
+  const totalBurned = dailyBaseBurn + workoutBurn;
   const netCalories = estimatedCals - totalBurned;
 
+  // SCIENTIFIC EVALUATION:
+  // Target calories is the user's deficit target (e.g. 2,289 kcal vs 2,934 kcal burn).
+  // If consumed calories are within ±150 kcal of target, they are in the OPTIMAL SWEET SPOT.
+  // If consumed calories exceed target by > 200 kcal, they are in a SURPLUS (fat loss stalled).
   let pacingRecommendation: 'deploy_more_effort' | 'go_slow_recover' | 'optimal_pace' = 'optimal_pace';
-  let pacingTitle = 'Optimal Pacing: Steady & Sustainable Progress';
-  let pacingExplanation = `Your estimated intake of ${estimatedCals} kcal with ~${totalBurned} kcal total expenditure keeps you in a healthy, sustainable zone.`;
+  let pacingTitle = '🎯 Optimal Sweet Spot: On-Track Deficit & Progress';
+  let pacingExplanation = `Your estimated intake of ${estimatedCals} kcal with ~${totalBurned} kcal total expenditure is right on target for healthy fat loss. Protein (${estimatedProtein}g) supports muscle retention.`;
 
-  if (estimatedCals > targetCalories + 300) {
+  const calorieDelta = estimatedCals - targetCalories;
+
+  if (calorieDelta > 200) {
     pacingRecommendation = 'deploy_more_effort';
-    pacingTitle = 'Deploy More Effort: Slight Calorie Surplus Detected';
-    pacingExplanation = `Your estimated intake of ${estimatedCals} kcal is higher than your ${targetCalories} kcal deficit target. Increase non-exercise activity (add a 20-min brisk walk) and moderate cooking oils.`;
-  } else if (estimatedCals < 1300) {
+    pacingTitle = `⚠️ Deploy More Effort: +${calorieDelta} kcal Over Deficit Target`;
+    pacingExplanation = `Your intake of ${estimatedCals} kcal exceeds your target of ${targetCalories} kcal by +${calorieDelta} kcal. This eliminates your fat-loss deficit. To hit your target, moderate calorie-dense foods (parathas, sugary tea, extra rotis) and add a 25-minute brisk walk.`;
+  } else if (estimatedCals < 1250) {
     pacingRecommendation = 'go_slow_recover';
-    pacingTitle = 'Need to Go Slow / Recover: Severe Calorie Restriction';
-    pacingExplanation = `Your intake of ${estimatedCals} kcal is too low. Severe deficits below 1,400 kcal down-regulate thyroid output and accelerate muscle loss. Add complex carbs and protein.`;
+    pacingTitle = '🧘 Go Slow & Refuel: Critical Undereating Alert';
+    pacingExplanation = `Your intake of ${estimatedCals} kcal is dangerously low (under 1,250 kcal). Severe starvation slows metabolism and accelerates muscle loss. Refuel with complex carbs and protein.`;
   }
 
   return {
@@ -261,17 +250,39 @@ function fallbackAnalysis(
     proteinGrams: estimatedProtein,
     carbGrams: estimatedCarbs,
     fatGrams: estimatedFats,
-    mealBreakdown: [
-      { item: foodText.slice(0, 40) || 'Daily Meals', portion: 'Estimated Daily Intake', calories: estimatedCals, protein: estimatedProtein, carbs: estimatedCarbs, fats: estimatedFats },
-    ],
+    mealBreakdown:
+      parsedFood.items.length > 0
+        ? parsedFood.items
+        : [
+            {
+              item: foodText.slice(0, 50) || 'Daily Meals',
+              portion: 'Estimated Intake',
+              calories: estimatedCals,
+              protein: estimatedProtein,
+              carbs: estimatedCarbs,
+              fats: estimatedFats,
+            },
+          ],
     caloriesBurned: totalBurned,
-    activityBreakdown: activityItems.length > 0 ? activityItems : [{ name: 'Base Metabolism & Movement', durationOrMetric: '24 Hours', caloriesBurned: totalBurned }],
+    activityBreakdown:
+      parsedAct.items.length > 0
+        ? parsedAct.items
+        : [
+            {
+              name: 'Base Metabolism & Movement (TDEE)',
+              durationOrMetric: '24 Hours',
+              caloriesBurned: totalBurned,
+            },
+          ],
     netCalories,
     targetCalories,
     pacingRecommendation,
     pacingTitle,
     pacingExplanation,
-    nextStepAdvice: 'Drink 3.5L water, hit your protein target, and ensure 7.5 hours of restorative sleep tonight.',
+    nextStepAdvice:
+      calorieDelta > 200
+        ? 'Drink 3.5L water, replace high-carb snacks with protein (paneer/whey), and do a post-meal walk.'
+        : 'Drink 3.5L water, maintain your protein intake, and get 7.5 hours of restorative sleep tonight.',
   };
 }
 
