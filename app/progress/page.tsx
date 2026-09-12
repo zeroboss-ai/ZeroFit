@@ -329,17 +329,42 @@ export default function ProgressTrackerPage() {
   // Criteria for whether a given daily log's deficit is on track with target
   const checkLogOnTrack = (netDeficit: number | null) => {
     if (netDeficit === null) return false;
-    const targetDef = effectiveProfile?.targetDeficit || 450;
-    const isMuscleGain = effectiveProfile?.goal === 'gain_muscle';
+    const targetDef = effectiveProfile?.targetDeficit !== undefined ? effectiveProfile.targetDeficit : 450;
 
-    if (isMuscleGain) {
-      // Muscle gain target is a calorie surplus (negative deficit e.g. -150 to -450)
-      return netDeficit <= -150 && netDeficit >= -450;
+    if (targetDef > 0) {
+      // Deficit target (e.g. 300 kcal or 450 kcal for fat loss / body recomp)
+      // When user achieves a deficit, they are on track if deficit is at least (targetDef - 150) and <= 1300
+      return netDeficit >= Math.max(150, targetDef - 150) && netDeficit <= 1300;
+    } else if (targetDef < 0) {
+      // Clean surplus target (e.g. -250 kcal for pure mass gain)
+      const targetSurplus = Math.abs(targetDef);
+      return netDeficit <= -150 && netDeficit >= -(targetSurplus + 250);
+    } else {
+      // Maintenance target
+      return Math.abs(netDeficit) <= 250;
     }
+  };
 
-    // For fat loss & weight loss:
-    // On track if deficit meets target deficit within healthy boundaries (>= targetDef - 150 kcal, safe <= 1200 kcal)
-    return netDeficit >= (targetDef - 150) && netDeficit <= 1200;
+  const getLogStatusLabel = (netDeficit: number, isRowOnTrack: boolean) => {
+    const targetDef = effectiveProfile?.targetDeficit !== undefined ? effectiveProfile.targetDeficit : 450;
+    if (isRowOnTrack) {
+      return '🎯 Targeted / On Track';
+    }
+    if (targetDef > 0) {
+      if (netDeficit <= 0) {
+        return '⚠️ Over Target (Surplus)';
+      }
+      if (netDeficit > 1300) {
+        return '🧘 High Deficit (>1,300 kcal)';
+      }
+      return '⚠️ Deficit Below Target';
+    } else if (targetDef < 0) {
+      if (netDeficit > 0) {
+        return '⚠️ In Deficit (Target: Surplus)';
+      }
+      return '⚠️ Surplus Off Track';
+    }
+    return '⚠️ Off Maintenance';
   };
 
   // Aggregated "Ave Total" of all days with logged calories
@@ -380,14 +405,16 @@ export default function ProgressTrackerPage() {
     const avgBurn = Math.round(sumBurn / count);
     const avgWeight = sumWeight / count;
 
-    const targetDef = effectiveProfile?.targetDeficit || 450;
-    const isMuscleGain = effectiveProfile?.goal === 'gain_muscle';
+    const targetDef = effectiveProfile?.targetDeficit !== undefined ? effectiveProfile.targetDeficit : 450;
 
     let isOnTrack = false;
-    if (isMuscleGain) {
-      isOnTrack = avgNetDeficit <= -150 && avgNetDeficit >= -450;
+    if (targetDef > 0) {
+      isOnTrack = avgNetDeficit >= Math.max(150, targetDef - 100) && avgNetDeficit <= 1250;
+    } else if (targetDef < 0) {
+      const targetSurplus = Math.abs(targetDef);
+      isOnTrack = avgNetDeficit <= -150 && avgNetDeficit >= -(targetSurplus + 250);
     } else {
-      isOnTrack = avgNetDeficit >= (targetDef - 100) && avgNetDeficit <= 1100;
+      isOnTrack = Math.abs(avgNetDeficit) <= 250;
     }
 
     return {
@@ -1382,11 +1409,7 @@ export default function ProgressTrackerPage() {
                                 : `Surplus: +${Math.abs(energy.netDeficit)} kcal`}
                             </span>
                             <span className="text-[10px] font-semibold opacity-90">
-                              {isRowOnTrack
-                                ? '🎯 Targeted / On Track'
-                                : energy.netDeficit <= 0
-                                ? '⚠️ Over Target'
-                                : '⚠️ Below Target'}
+                              {getLogStatusLabel(energy.netDeficit, isRowOnTrack)}
                             </span>
                           </div>
                         ) : (
