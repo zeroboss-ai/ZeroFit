@@ -46,6 +46,8 @@ export async function POST(req: Request) {
       dietAdherence: body.dietAdherence || 'on_track',
       caloriesConsumed: body.caloriesConsumed ? Number(body.caloriesConsumed) : undefined,
       proteinGramsConsumed: body.proteinGramsConsumed ? Number(body.proteinGramsConsumed) : undefined,
+      caloriesBurned: body.caloriesBurned ? Number(body.caloriesBurned) : undefined,
+      netDeficit: body.netDeficit !== undefined ? Number(body.netDeficit) : undefined,
       workoutType: body.workoutType || '',
       workoutMinutes: body.workoutMinutes ? Number(body.workoutMinutes) : undefined,
       workoutIntensity: body.workoutIntensity || 'moderate',

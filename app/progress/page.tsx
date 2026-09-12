@@ -146,6 +146,8 @@ export default function ProgressTrackerPage() {
       // 2. Automatically record check-in log to database & state
       const consumedKcal = Math.round(data.analysis.caloriesConsumed || 0);
       const proteinG = Math.round(data.analysis.proteinGrams || 0);
+      const burnedKcal = Math.round(data.analysis.caloriesBurned || 0);
+      const netDeficitVal = burnedKcal - consumedKcal;
       const hasWorkout = Boolean(aiActivityInput.trim());
       const mainWorkoutName =
         data.analysis.activityBreakdown?.[0]?.name || aiActivityInput.trim() || 'Daily Activity';
@@ -169,6 +171,8 @@ export default function ProgressTrackerPage() {
           dietAdherence: adherence,
           caloriesConsumed: consumedKcal,
           proteinGramsConsumed: proteinG,
+          caloriesBurned: burnedKcal,
+          netDeficit: netDeficitVal,
           workoutType: hasWorkout ? mainWorkoutName : 'Rest Day',
           workoutMinutes: hasWorkout ? 45 : 0,
           workoutIntensity: 'moderate',
@@ -229,20 +233,41 @@ export default function ProgressTrackerPage() {
     setSuccessMessage('');
 
     try {
+      const parsedWeight = parseFloat(weightKg);
+      const logWeight = parsedWeight || effectiveProfile?.weightKg || 75;
+      const bmr =
+        effectiveProfile?.restingMaintenance ||
+        effectiveProfile?.bmr ||
+        Math.round(10 * logWeight + 6.25 * 175 - 5 * 28 + 5);
+
+      let workoutBurn = 0;
+      if (workoutDone) {
+        const parsed = parsePhysicalActivity(workoutType, logWeight);
+        workoutBurn =
+          parsed.totalBurn > 0
+            ? parsed.totalBurn
+            : Math.round(((5.0 * 3.5 * logWeight) / 200) * (workoutMinutes ? parseInt(workoutMinutes) : 45));
+      }
+      const totalBurned = bmr + workoutBurn;
+      const consumed = caloriesConsumed ? parseFloat(caloriesConsumed) : undefined;
+      const netDef = consumed !== undefined ? totalBurned - consumed : undefined;
+
       const res = await fetch('/api/progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date,
-          weightKg: parseFloat(weightKg),
+          weightKg: parsedWeight,
           waistCm: waistCm ? parseFloat(waistCm) : undefined,
           chestCm: chestCm ? parseFloat(chestCm) : undefined,
           workoutCompleted: workoutDone,
           waterLiters: waterLiters ? parseFloat(waterLiters) : undefined,
           foodNotes: foodNotes.trim(),
           dietAdherence,
-          caloriesConsumed: caloriesConsumed ? parseFloat(caloriesConsumed) : undefined,
+          caloriesConsumed: consumed,
           proteinGramsConsumed: proteinGramsConsumed ? parseFloat(proteinGramsConsumed) : undefined,
+          caloriesBurned: totalBurned,
+          netDeficit: netDef,
           workoutType: workoutDone ? workoutType : 'Rest Day',
           workoutMinutes: workoutDone && workoutMinutes ? parseInt(workoutMinutes) : 0,
           workoutIntensity,
@@ -265,6 +290,117 @@ export default function ProgressTrackerPage() {
       setSubmitting(false);
     }
   };
+
+  // Helper to compute daily burn and net deficit for any log (stored or dynamically calculated)
+  const computeLogEnergy = (log: ProgressLog) => {
+    const logWeight = log.weightKg || effectiveProfile?.weightKg || 75;
+    const bmr =
+      effectiveProfile?.restingMaintenance ||
+      effectiveProfile?.bmr ||
+      Math.round(10 * logWeight + 6.25 * 175 - 5 * 28 + 5);
+
+    let totalBurn = log.caloriesBurned;
+    if (!totalBurn || totalBurn <= 0) {
+      let workoutBurn = 0;
+      if (log.workoutType && log.workoutType !== 'Rest Day') {
+        const parsed = parsePhysicalActivity(log.workoutType, logWeight);
+        workoutBurn = parsed.totalBurn;
+        if (workoutBurn === 0 && log.workoutCompleted) {
+          workoutBurn = Math.round(((5.0 * 3.5 * logWeight) / 200) * (log.workoutMinutes || 45));
+        }
+      } else if (log.workoutCompleted) {
+        workoutBurn = Math.round(((5.0 * 3.5 * logWeight) / 200) * (log.workoutMinutes || 45));
+      }
+      totalBurn = bmr + workoutBurn;
+    }
+
+    const consumed = log.caloriesConsumed;
+    // Net Deficit = Total Burn - Consumed (positive means deficit for fat loss, negative means surplus)
+    const netDeficit =
+      log.netDeficit !== undefined
+        ? log.netDeficit
+        : consumed !== undefined && consumed !== null
+        ? totalBurn - consumed
+        : null;
+
+    return { totalBurn, consumed, netDeficit };
+  };
+
+  // Criteria for whether a given daily log's deficit is on track with target
+  const checkLogOnTrack = (netDeficit: number | null) => {
+    if (netDeficit === null) return false;
+    const targetDef = effectiveProfile?.targetDeficit || 450;
+    const isMuscleGain = effectiveProfile?.goal === 'gain_muscle';
+
+    if (isMuscleGain) {
+      // Muscle gain target is a calorie surplus (negative deficit e.g. -150 to -450)
+      return netDeficit <= -150 && netDeficit >= -450;
+    }
+
+    // For fat loss & weight loss:
+    // On track if deficit meets target deficit within healthy boundaries (>= targetDef - 150 kcal, safe <= 1200 kcal)
+    return netDeficit >= (targetDef - 150) && netDeficit <= 1200;
+  };
+
+  // Aggregated "Ave Total" of all days with logged calories
+  const logStats = React.useMemo(() => {
+    const logsWithNutrition = logs.filter(
+      (l) => l.caloriesConsumed !== undefined && l.caloriesConsumed !== null && l.caloriesConsumed > 0
+    );
+
+    if (logsWithNutrition.length === 0) {
+      return {
+        hasData: false,
+        count: 0,
+        totalDeficit: 0,
+        avgNetDeficit: 0,
+        avgIntake: 0,
+        avgBurn: 0,
+        avgWeight: 0,
+        isOnTrack: false,
+      };
+    }
+
+    let sumDeficit = 0;
+    let sumIntake = 0;
+    let sumBurn = 0;
+    let sumWeight = 0;
+
+    for (const log of logsWithNutrition) {
+      const energy = computeLogEnergy(log);
+      sumDeficit += energy.netDeficit || 0;
+      sumIntake += energy.consumed || 0;
+      sumBurn += energy.totalBurn || 0;
+      sumWeight += log.weightKg || effectiveProfile?.weightKg || 75;
+    }
+
+    const count = logsWithNutrition.length;
+    const avgNetDeficit = Math.round(sumDeficit / count);
+    const avgIntake = Math.round(sumIntake / count);
+    const avgBurn = Math.round(sumBurn / count);
+    const avgWeight = sumWeight / count;
+
+    const targetDef = effectiveProfile?.targetDeficit || 450;
+    const isMuscleGain = effectiveProfile?.goal === 'gain_muscle';
+
+    let isOnTrack = false;
+    if (isMuscleGain) {
+      isOnTrack = avgNetDeficit <= -150 && avgNetDeficit >= -450;
+    } else {
+      isOnTrack = avgNetDeficit >= (targetDef - 100) && avgNetDeficit <= 1100;
+    }
+
+    return {
+      hasData: true,
+      count,
+      totalDeficit: sumDeficit,
+      avgNetDeficit,
+      avgIntake,
+      avgBurn,
+      avgWeight,
+      isOnTrack,
+    };
+  }, [logs, effectiveProfile]);
 
   // Metrics calculations (Only authentic data)
   const hasLogs = logs.length > 0;
@@ -701,7 +837,7 @@ export default function ProgressTrackerPage() {
                 {[
                   '45m Push Workout (Gym)',
                   '5 km Zone 2 Aerobic Run',
-                  '10,000 Steps Daily Walk',
+                  '10000 Steps Daily Walk',
                   '15m Post-Meal Walk',
                   '30m Bodyweight Home Workout',
                   '12m Joint Mobility Routine',
@@ -1118,14 +1254,50 @@ export default function ProgressTrackerPage() {
 
       {/* 4. EXPANDED CHECK-IN HISTORY TABLE */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm space-y-0">
-        <div className="p-5 border-b border-slate-100 dark:border-slate-800 font-bold text-sm text-slate-900 dark:text-white flex items-center justify-between">
+        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center space-x-2">
             <Calendar className="w-4 h-4 text-emerald-600" />
-            <span>{t.history}</span>
+            <span className="font-bold text-sm text-slate-900 dark:text-white">{t.history}</span>
+            <span className="text-xs font-normal text-slate-400">
+              ({logs.length} Total Check-ins Recorded)
+            </span>
           </div>
-          <span className="text-xs font-normal text-slate-400">
-            {logs.length} Total Check-ins Recorded
-          </span>
+
+          {/* Prominent "Ave Total" of All Days */}
+          {logStats.hasData && (
+            <div
+              className={`flex items-center gap-3 px-4 py-2 rounded-2xl border transition-all ${
+                logStats.isOnTrack
+                  ? 'bg-emerald-50/90 dark:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                  : 'bg-rose-50/90 dark:bg-rose-950/60 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200'
+              }`}
+            >
+              <div
+                className={`w-2.5 h-2.5 rounded-full ${
+                  logStats.isOnTrack ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                }`}
+              />
+              <div className="text-left">
+                <span className="text-[10px] uppercase font-bold tracking-wider block opacity-75">
+                  Ave Total ({logStats.count} Days)
+                </span>
+                <span className="text-xs sm:text-sm font-black">
+                  {logStats.avgNetDeficit >= 0
+                    ? `+${logStats.avgNetDeficit} kcal/day Deficit`
+                    : `Surplus: +${Math.abs(logStats.avgNetDeficit)} kcal/day`}
+                </span>
+              </div>
+              <span
+                className={`text-[10px] px-2.5 py-1 rounded-full uppercase font-black tracking-wider ${
+                  logStats.isOnTrack
+                    ? 'bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-200'
+                    : 'bg-rose-100 dark:bg-rose-900 text-rose-700 dark:text-rose-200'
+                }`}
+              >
+                {logStats.isOnTrack ? '🎯 Targeted / On Track' : '⚠️ Below Target / Over'}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -1136,72 +1308,169 @@ export default function ProgressTrackerPage() {
                   <th className="py-3.5 px-4">Date</th>
                   <th className="py-3.5 px-4">Weight</th>
                   <th className="py-3.5 px-4">Food & Nutrition</th>
-                  <th className="py-3.5 px-4">Adherence</th>
                   <th className="py-3.5 px-4">Workout Status</th>
+                  <th className="py-3.5 px-4">Daily Burn</th>
+                  <th className="py-3.5 px-4">Net Deficit</th>
+                  <th className="py-3.5 px-4">Adherence</th>
                   <th className="py-3.5 px-4">Water</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {[...logs].reverse().map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
-                      {log.date}
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-emerald-600 whitespace-nowrap">
-                      {log.weightKg} kg
-                    </td>
-                    <td className="py-3.5 px-4 max-w-xs truncate">
-                      {log.foodNotes ? (
-                        <span title={log.foodNotes} className="text-slate-800 dark:text-slate-200">
-                          {log.foodNotes}
+                {[...logs].reverse().map((log) => {
+                  const energy = computeLogEnergy(log);
+                  const isRowOnTrack = checkLogOnTrack(energy.netDeficit);
+
+                  return (
+                    <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                      <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white whitespace-nowrap">
+                        {log.date}
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-emerald-600 whitespace-nowrap">
+                        {log.weightKg} kg
+                      </td>
+                      <td className="py-3.5 px-4 max-w-xs truncate">
+                        {log.foodNotes ? (
+                          <span title={log.foodNotes} className="text-slate-800 dark:text-slate-200 block truncate">
+                            {log.foodNotes}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic block">No food note</span>
+                        )}
+                        {log.caloriesConsumed ? (
+                          <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
+                            {log.caloriesConsumed} kcal • {log.proteinGramsConsumed || 0}g P
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {log.workoutCompleted ? (
+                          <div className="space-y-0.5">
+                            <span className="inline-flex items-center space-x-1 text-emerald-600 font-bold">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Done ({log.workoutMinutes || 45}m)</span>
+                            </span>
+                            {log.workoutType && (
+                              <span className="block text-[10px] text-slate-400 truncate max-w-[150px]">
+                                {log.workoutType}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic">Rest Day</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          {energy.totalBurn} <span className="text-[10px] font-normal text-slate-400">kcal</span>
                         </span>
-                      ) : (
-                        <span className="text-slate-400 italic">No food note</span>
-                      )}
-                      {log.caloriesConsumed ? (
                         <span className="block text-[10px] text-slate-400">
-                          {log.caloriesConsumed} kcal • {log.proteinGramsConsumed || 0}g P
+                          {log.workoutCompleted ? 'Rest + Workout' : 'Rest Day (BMR)'}
                         </span>
-                      ) : null}
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {energy.netDeficit !== null ? (
+                          <div
+                            className={`inline-flex flex-col px-2.5 py-1 rounded-xl border text-xs ${
+                              isRowOnTrack
+                                ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-rose-50 dark:bg-rose-950/70 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+                            }`}
+                          >
+                            <span className="font-black">
+                              {energy.netDeficit >= 0
+                                ? `+${energy.netDeficit} kcal Deficit`
+                                : `Surplus: +${Math.abs(energy.netDeficit)} kcal`}
+                            </span>
+                            <span className="text-[10px] font-semibold opacity-90">
+                              {isRowOnTrack
+                                ? '🎯 Targeted / On Track'
+                                : energy.netDeficit <= 0
+                                ? '⚠️ Over Target'
+                                : '⚠️ Below Target'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic">—</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            log.dietAdherence === 'on_track'
+                              ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                              : log.dietAdherence === 'cheat_day'
+                              ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
+                              : log.dietAdherence === 'over_calories'
+                              ? 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          {log.dietAdherence ? log.dietAdherence.replace('_', ' ') : 'recorded'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {log.waterLiters ? `${log.waterLiters}L` : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {logStats.hasData && (
+                <tfoot className="bg-slate-50 dark:bg-slate-800/80 font-bold border-t-2 border-slate-200 dark:border-slate-700 text-xs">
+                  <tr>
+                    <td className="py-3.5 px-4 text-slate-900 dark:text-white uppercase text-[11px] tracking-wider whitespace-nowrap">
+                      Ave Total ({logStats.count} Days)
+                    </td>
+                    <td className="py-3.5 px-4 text-emerald-600 font-black whitespace-nowrap">
+                      {logStats.avgWeight.toFixed(1)} kg
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300">
+                      <span className="font-black text-slate-900 dark:text-white">
+                        ~{logStats.avgIntake} kcal
+                      </span>
+                      <span className="text-[10px] text-slate-400 block font-normal">avg intake / day</span>
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap">
+                      <span>{completedCount} sessions done</span>
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        ~{logStats.avgBurn} kcal
+                      </span>
+                      <span className="text-[10px] text-slate-400 block font-normal">avg daily burn</span>
                     </td>
                     <td className="py-3.5 px-4 whitespace-nowrap">
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          log.dietAdherence === 'on_track'
-                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                            : log.dietAdherence === 'cheat_day'
-                            ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
-                            : log.dietAdherence === 'over_calories'
-                            ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      <div
+                        className={`inline-flex flex-col px-2.5 py-1 rounded-xl border text-xs ${
+                          logStats.isOnTrack
+                            ? 'bg-emerald-50 dark:bg-emerald-950/70 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-rose-50 dark:bg-rose-950/70 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300'
                         }`}
                       >
-                        {log.dietAdherence ? log.dietAdherence.replace('_', ' ') : 'recorded'}
+                        <span className="font-black">
+                          {logStats.avgNetDeficit >= 0
+                            ? `+${logStats.avgNetDeficit} kcal Deficit`
+                            : `Surplus: +${Math.abs(logStats.avgNetDeficit)} kcal`}
+                        </span>
+                        <span className="text-[10px] font-semibold opacity-90">
+                          {logStats.isOnTrack ? '🎯 Targeted / On Track' : '⚠️ Below Target'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4 whitespace-nowrap" colSpan={2}>
+                      <span
+                        className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                          logStats.isOnTrack
+                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
+                            : 'bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300'
+                        }`}
+                      >
+                        Goal: -{effectiveProfile.targetDeficit || 450} kcal / day
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      {log.workoutCompleted ? (
-                        <div className="space-y-0.5">
-                          <span className="inline-flex items-center space-x-1 text-emerald-600 font-bold">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Done ({log.workoutMinutes || 45}m)</span>
-                          </span>
-                          {log.workoutType && (
-                            <span className="block text-[10px] text-slate-400 truncate max-w-[150px]">
-                              {log.workoutType}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 italic">Rest Day</span>
-                      )}
-                    </td>
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      {log.waterLiters ? `${log.waterLiters}L` : '—'}
-                    </td>
                   </tr>
-                ))}
-              </tbody>
+                </tfoot>
+              )}
             </table>
           ) : (
             <div className="p-10 text-center text-xs text-slate-500 space-y-2">

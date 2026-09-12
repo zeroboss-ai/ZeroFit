@@ -289,8 +289,11 @@ export function parseFoodIntake(rawText: string): {
     return { items: [], totalCalories: 0, totalProtein: 0, totalCarbs: 0, totalFats: 0 };
   }
 
+  // Normalize numbers with commas like 10,000 or 1,500 to 10000 or 1500 before splitting by commas
+  const normalizedText = rawText.replace(/(\d+),(\d{3})/g, '$1$2');
+
   // Split by comma, newlines, or plus (+) signs
-  const rawSegments = rawText
+  const rawSegments = normalizedText
     .split(/[,+\n]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 1);
@@ -400,7 +403,10 @@ export function parsePhysicalActivity(
     return { items: [], totalBurn: 0 };
   }
 
-  const segments = rawText
+  // Normalize numbers with commas like 10,000 or 5,000 to 10000 or 5000 before splitting by commas
+  const normalizedText = rawText.replace(/(\d+),(\d{3})/g, '$1$2');
+
+  const segments = normalizedText
     .split(/[,+\n]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 1);
@@ -428,8 +434,8 @@ export function parsePhysicalActivity(
       continue;
     }
 
-    // 2. Check for Steps (e.g., "10000 steps daily walk", "5,000 steps")
-    const stepMatch = lower.match(/([\d,]+)\s*steps/);
+    // 2. Check for Steps (e.g., "10000 steps daily walk", "5,000 steps", "10000 step")
+    const stepMatch = lower.match(/([\d,]+)\s*steps?/);
     if (stepMatch) {
       const steps = parseInt(stepMatch[1].replace(/,/g, ''));
       // ~0.042 kcal per step for 80kg body (10,000 steps ≈ 420-470 kcal for 80-90kg)

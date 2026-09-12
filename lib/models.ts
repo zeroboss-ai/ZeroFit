@@ -99,6 +99,8 @@ export interface IProgressLog extends Document {
   dietAdherence?: string;
   caloriesConsumed?: number;
   proteinGramsConsumed?: number;
+  caloriesBurned?: number;
+  netDeficit?: number;
   workoutType?: string;
   workoutMinutes?: number;
   workoutIntensity?: string;
@@ -121,6 +123,8 @@ const ProgressLogSchema: Schema = new Schema(
     dietAdherence: String,
     caloriesConsumed: Number,
     proteinGramsConsumed: Number,
+    caloriesBurned: Number,
+    netDeficit: Number,
     workoutType: String,
     workoutMinutes: Number,
     workoutIntensity: String,

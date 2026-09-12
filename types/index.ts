@@ -196,6 +196,8 @@ export interface ProgressLog {
   dietAdherence?: DietAdherence;
   caloriesConsumed?: number;
   proteinGramsConsumed?: number;
+  caloriesBurned?: number;
+  netDeficit?: number;
   // Daily Workout Status Tracking
   workoutType?: string;
   workoutMinutes?: number;
