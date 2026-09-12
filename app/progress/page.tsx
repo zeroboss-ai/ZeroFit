@@ -802,7 +802,7 @@ export default function ProgressTrackerPage() {
                 <span className="text-2xl font-black text-orange-600 dark:text-orange-400 mt-0.5 block">
                   {Math.round(aiAnalysisResult.caloriesBurned)} <span className="text-xs font-medium text-orange-400">kcal</span>
                 </span>
-                <span className="text-[10px] text-slate-400 mt-1 block">BMR + NEAT + Workouts</span>
+                <span className="text-[10px] text-slate-400 mt-1 block">Rest Burn + Logged Workouts</span>
               </div>
 
               {/* Net Calories */}
@@ -816,13 +816,13 @@ export default function ProgressTrackerPage() {
                 </span>
               </div>
 
-              {/* Target Calories */}
+              {/* Target Deficit */}
               <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center">
-                <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block">Daily Target</span>
+                <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block">Target Deficit</span>
                 <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-0.5 block">
-                  {aiAnalysisResult.targetCalories || effectiveProfile.targetCalories} <span className="text-xs font-medium text-emerald-500">kcal</span>
+                  - {effectiveProfile.targetDeficit || 450} <span className="text-xs font-medium text-emerald-500">kcal</span>
                 </span>
-                <span className="text-[10px] text-emerald-600/75 mt-1 block">Target: {effectiveProfile.proteinGrams}g Protein</span>
+                <span className="text-[10px] text-emerald-600/75 mt-1 block">Intake Target: ~{effectiveProfile.targetCalories} kcal</span>
               </div>
             </div>
 

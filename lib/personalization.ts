@@ -110,54 +110,52 @@ export function computePersonalizedTargets(params: Partial<UserProfile>): UserPr
   // Always honor the user's explicitly chosen fitness goal
   const effectiveGoal: FitnessGoal = goal || 'lose_fat';
 
-  // Caloric adjustment based on goal and BMI safety bounds
-  let targetCalories = tdee;
+  // Resting Maintenance (calories needed to maintain current weight on rest days)
+  const restingMaintenance = bmr;
+
+  // Deficit or surplus needed to reach target weight
+  let targetDeficit = 0;
+  let targetCalories = restingMaintenance;
   const safetyAdvice: string[] = [];
 
   // Goal adjustments
   if (effectiveGoal === 'lose_fat') {
-    // Evidence-based 20-25% deficit below TDEE
-    const deficitPercentage = bmiCategory === 'obese' || bmiCategory === 'overweight' ? 0.22 : 0.18;
-    const deficitKcal = Math.max(450, Math.round(tdee * deficitPercentage));
-    targetCalories = Math.round(tdee - deficitKcal);
-
-    // Physiological ceiling for realistic, steady fat loss
-    const maxFatLossCap = gender === 'female' ? 1950 : 2350;
-    if (targetCalories > maxFatLossCap) {
-      targetCalories = maxFatLossCap;
-    }
-    const minFloor = gender === 'female' ? 1250 : 1500;
-    if (targetCalories < minFloor) targetCalories = minFloor;
+    // Sustainable sports-science fat-loss deficit (450-500 kcal/day to burn ~0.5kg pure fat/week)
+    targetDeficit = bmiCategory === 'obese' ? 550 : 450;
+    // On active days, eating near resting maintenance while exercising creates the 450-500 kcal deficit
+    targetCalories = Math.max(1400, Math.round(restingMaintenance));
 
     safetyAdvice.push(
-      `Fat-Loss Protocol: Sustainable ${deficitKcal} kcal deficit below TDEE (${tdee} kcal). High protein protects your lean muscle while burning fat.`
+      `Fat-Loss Protocol: Resting maintenance is ${restingMaintenance} kcal. A ${targetDeficit} kcal daily deficit burns stored body fat sustainably without muscle loss.`
     );
   } else if (effectiveGoal === 'gain_muscle') {
     if (targetWeightKg < weightKg - 0.5) {
-      // Body Recomposition: building muscle / lean hypertrophy while shedding fat
-      const recompDeficit = Math.round(tdee * 0.10); // mild 10% deficit
-      targetCalories = Math.max(1600, Math.round(tdee - recompDeficit));
+      // Body Recomposition
+      targetDeficit = 300;
+      targetCalories = restingMaintenance;
       safetyAdvice.push(
-        `Lean Hypertrophy & Recomp: User target is lighter than current weight. High protein (2.0g/kg) and progressive overload stimulates muscle hypertrophy while burning fat.`
+        `Lean Hypertrophy & Recomp: High protein (2.0g/kg) and progressive overload stimulates muscle hypertrophy while burning fat.`
       );
     } else {
-      // Clean Mass Surplus: 250-350 kcal
-      const surplus = bmiCategory === 'underweight' ? 350 : 250;
-      targetCalories = Math.round(tdee + surplus);
+      // Clean Mass Surplus: +250 kcal
+      targetDeficit = -250;
+      targetCalories = Math.round(restingMaintenance + 250);
       safetyAdvice.push(
-        `Muscle Hypertrophy Protocol: Controlled lean surplus of +${surplus} kcal above TDEE (${tdee} kcal) to maximize muscle protein synthesis with minimal fat gain.`
+        `Muscle Hypertrophy Protocol: Controlled lean surplus of +250 kcal above resting maintenance (${restingMaintenance} kcal) for clean muscle gain.`
       );
     }
   } else if (effectiveGoal === 'maintain') {
-    targetCalories = Math.round(tdee);
+    targetDeficit = 0;
+    targetCalories = restingMaintenance;
     safetyAdvice.push(
-      `Body Recomposition / Maintenance: Calorie target matched to your TDEE (${tdee} kcal). Focus on consistent resistance training and protein pacing.`
+      `Body Recomposition / Maintenance: Calorie target matched to your resting maintenance (${restingMaintenance} kcal). Focus on resistance training.`
     );
   } else {
     // general_health
-    targetCalories = Math.round(tdee);
+    targetDeficit = 0;
+    targetCalories = restingMaintenance;
     safetyAdvice.push(
-      `Longevity & Heart Health: Balanced maintenance intake at ${tdee} kcal with anti-inflammatory whole foods and daily movement.`
+      `Longevity & Heart Health: Balanced intake at ${restingMaintenance} kcal resting burn with anti-inflammatory whole foods and daily movement.`
     );
   }
 
@@ -271,8 +269,10 @@ export function computePersonalizedTargets(params: Partial<UserProfile>): UserPr
     bmi,
     bmiCategory,
     bmr,
+    restingMaintenance,
     tdee,
     targetCalories,
+    targetDeficit,
     proteinGrams,
     carbGrams,
     fatGrams,

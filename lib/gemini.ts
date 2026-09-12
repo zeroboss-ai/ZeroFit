@@ -218,40 +218,32 @@ function fallbackAnalysis(
   const estimatedCarbs = parsedFood.totalCarbs > 0 ? parsedFood.totalCarbs : 210;
   const estimatedFats = parsedFood.totalFats > 0 ? parsedFood.totalFats : 55;
 
-  // Base daily expenditure (BMR + Sedentary NEAT + Logged Exercise)
-  // NOTE: We do NOT add workoutBurn on top of TDEE because TDEE already has exercise multipliers built in.
+  // Total Daily Burn calculated directly as: Resting Burn (BMR) + Actual Logged Workouts
   const bmrEstimate = profile.bmr || Math.round(10 * currentWeight + 6.25 * 175 - 5 * 28 + 5);
-  const sedentaryBaseline = Math.round(bmrEstimate * 1.15); // Resting burn + basic desk activities / TEF digestion
   const workoutBurn = parsedAct.totalBurn;
-
-  // If workouts/steps were logged, Total Burn = Sedentary Base + Specific Workouts.
-  // If no workouts were logged, default to standard maintenance TDEE.
-  let totalBurned = workoutBurn > 0 ? sedentaryBaseline + workoutBurn : tdee;
-
-  // Physiological cap for non-extreme training
-  const maxRealisticBurn = Math.round(bmrEstimate * 2.1);
-  if (totalBurned > maxRealisticBurn) {
-    totalBurned = maxRealisticBurn;
-  }
-
+  const totalBurned = bmrEstimate + workoutBurn;
   const netCalories = estimatedCals - totalBurned;
+  const actualDeficit = totalBurned - estimatedCals;
+  const targetDef = profile.targetDeficit || 450;
 
-  // SCIENTIFIC EVALUATION:
-  // Target calories is the user's deficit target (e.g. 2,289 kcal vs 2,934 kcal burn).
+  // SCIENTIFIC EVALUATION: Evaluates achieved deficit against target deficit directly
   let pacingRecommendation: 'deploy_more_effort' | 'go_slow_recover' | 'optimal_pace' = 'optimal_pace';
   let pacingTitle = '🎯 Optimal Sweet Spot: On-Track Deficit & Progress';
-  let pacingExplanation = `Your estimated intake of ${estimatedCals} kcal with ~${totalBurned} kcal total expenditure creates an effective fat-loss deficit. Protein (${estimatedProtein}g) supports muscle retention.`;
+  let pacingExplanation = `You burned ${totalBurned} kcal (Rest: ${bmrEstimate} kcal + Workouts: ${workoutBurn} kcal) against ${estimatedCals} kcal consumed, creating an authentic -${actualDeficit} kcal deficit (Target: -${targetDef} kcal). Protein (${estimatedProtein}g) supports muscle retention.`;
 
-  const calorieDelta = estimatedCals - targetCalories;
-
-  if (calorieDelta > 200) {
-    pacingRecommendation = 'deploy_more_effort';
-    pacingTitle = `⚠️ Deploy More Effort: +${calorieDelta} kcal Over Deficit Target`;
-    pacingExplanation = `Your intake of ${estimatedCals} kcal exceeds your target of ${targetCalories} kcal by +${calorieDelta} kcal. Today's net energy deficit is ${Math.abs(netCalories)} kcal (vs your ideal ${Math.round(tdee - targetCalories)} kcal fat-loss target). To stay on track, moderate calorie-dense foods (parathas, sugary tea) and add a brisk post-meal walk.`;
-  } else if (estimatedCals < 1250) {
+  if (actualDeficit > 1000 || estimatedCals < 1200) {
     pacingRecommendation = 'go_slow_recover';
-    pacingTitle = '🧘 Go Slow & Refuel: Critical Undereating Alert';
-    pacingExplanation = `Your intake of ${estimatedCals} kcal is dangerously low (under 1,250 kcal). Severe starvation slows metabolism and accelerates muscle loss. Refuel with complex carbs and protein.`;
+    pacingTitle = '🧘 Go Slow & Refuel: Deficit Too Aggressive';
+    pacingExplanation = `Your net deficit of -${actualDeficit} kcal is excessively steep. Severe caloric restriction slows resting metabolic rate and breaks down muscle tissue. Add nutrient-dense whole foods.`;
+  } else if (actualDeficit < targetDef - 150) {
+    pacingRecommendation = 'deploy_more_effort';
+    if (actualDeficit <= 0) {
+      pacingTitle = `⚠️ Deploy More Effort: +${Math.abs(actualDeficit)} kcal Surplus Logged`;
+      pacingExplanation = `Your intake of ${estimatedCals} kcal exceeded your total burn of ${totalBurned} kcal by +${Math.abs(actualDeficit)} kcal. To reach ${profile.targetWeightKg || 75} kg with your targeted -${targetDef} kcal deficit, trim calorie-dense foods (parathas, sugary chai) and add a brisk walk.`;
+    } else {
+      pacingTitle = `⚠️ Deploy More Effort: -${actualDeficit} kcal Deficit (Target: -${targetDef} kcal)`;
+      pacingExplanation = `You achieved a -${actualDeficit} kcal deficit today, which is below your target deficit of -${targetDef} kcal. Scale down high-carb portions slightly to stay on schedule.`;
+    }
   }
 
   return {
@@ -289,7 +281,7 @@ function fallbackAnalysis(
     pacingTitle,
     pacingExplanation,
     nextStepAdvice:
-      calorieDelta > 200
+      actualDeficit < targetDef - 150
         ? 'Drink 3.5L water, replace high-carb snacks with protein (paneer/whey), and do a post-meal walk.'
         : 'Drink 3.5L water, maintain your protein intake, and get 7.5 hours of restorative sleep tonight.',
   };

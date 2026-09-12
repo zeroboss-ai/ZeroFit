@@ -39,8 +39,10 @@ export interface UserProfile {
   bmi: number;
   bmiCategory: BMICategory;
   bmr: number;
+  restingMaintenance: number;
   tdee: number;
   targetCalories: number;
+  targetDeficit: number;
   proteinGrams: number;
   carbGrams: number;
   fatGrams: number;

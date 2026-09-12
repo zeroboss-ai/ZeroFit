@@ -82,10 +82,11 @@ export default function ProfilePage() {
     difficulty: computedTargets.ageGroup === 'seniors' ? 'beginner' : 'intermediate',
   });
 
-  const calorieDiff = computedTargets.targetCalories - computedTargets.tdee;
-  const isDeficit = calorieDiff < 0;
-  const isSurplus = calorieDiff > 0;
-  const diffAbs = Math.abs(calorieDiff);
+  const restingBurn = computedTargets.restingMaintenance || computedTargets.bmr;
+  const targetDeficit = computedTargets.targetDeficit !== undefined ? computedTargets.targetDeficit : (computedTargets.tdee - computedTargets.targetCalories);
+  const isDeficit = targetDeficit > 0;
+  const isSurplus = targetDeficit < 0;
+  const diffAbs = Math.abs(targetDeficit);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -498,22 +499,22 @@ export default function ProfilePage() {
                   </span>
                 </div>
 
-                {/* TOP ROW: Maintenance Burn vs Daily Adjustment (+ / -) */}
+                {/* TOP ROW: Maintain Weight on Rest vs Target Deficit */}
                 <div className="grid grid-cols-2 gap-3 text-center">
-                  {/* Box 1: What Body Burns to Maintain */}
+                  {/* Box 1: Maintain Weight on Rest */}
                   <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700">
                     <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block tracking-wider">
-                      1. Your Body Burns
+                      1. Maintain on Rest
                     </span>
                     <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-0.5">
-                      {computedTargets.tdee} <span className="text-xs font-semibold text-slate-400">kcal</span>
+                      {restingBurn} <span className="text-xs font-semibold text-slate-400">kcal</span>
                     </div>
                     <span className="inline-block mt-1 text-[10px] font-semibold text-slate-500">
-                      To maintain {formData.weightKg} kg
+                      Rest day burn for {formData.weightKg} kg
                     </span>
                   </div>
 
-                  {/* Box 2: Deficit (-) or Surplus (+) in Big Bold Typography */}
+                  {/* Box 2: Deficit Needed for Target */}
                   <div className={`p-3.5 rounded-xl border ${
                     isDeficit
                       ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50'
@@ -528,7 +529,7 @@ export default function ProfilePage() {
                         ? 'text-sky-700 dark:text-sky-400'
                         : 'text-emerald-700 dark:text-emerald-400'
                     }`}>
-                      2. Daily Adjustment
+                      2. Target Deficit
                     </span>
                     <div className={`text-xl sm:text-2xl font-black mt-0.5 ${
                       isDeficit
@@ -547,7 +548,7 @@ export default function ProfilePage() {
                         ? 'text-sky-700 dark:text-sky-300'
                         : 'text-emerald-700 dark:text-emerald-300'
                     }`}>
-                      {isDeficit ? '🔥 Fat Loss Deficit' : isSurplus ? '⚡ Muscle Surplus' : '⚖️ Exact Balance'}
+                      {isDeficit ? `🔥 Needed for ${formData.targetWeightKg} kg` : isSurplus ? '⚡ Clean Surplus' : '⚖️ Exact Maintenance'}
                     </span>
                   </div>
                 </div>
@@ -555,7 +556,7 @@ export default function ProfilePage() {
                 {/* HERO BANNER: WHAT TO EAT EVERY DAY */}
                 <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg text-center space-y-2">
                   <span className="text-[11px] uppercase font-black tracking-widest text-emerald-100 block">
-                    👉 Target: Eat This Every Day to Reach {computedTargets.targetWeightKg} kg
+                    👉 Daily Target Intake to Reach {computedTargets.targetWeightKg} kg
                   </span>
                   <div className="text-4xl sm:text-5xl font-black tracking-tight drop-shadow-sm">
                     {computedTargets.targetCalories}{' '}
@@ -563,17 +564,11 @@ export default function ProfilePage() {
                   </div>
                   <p className="text-xs text-emerald-50 max-w-md mx-auto leading-relaxed pt-1">
                     {isDeficit
-                      ? `Your body burns ${computedTargets.tdee} kcal every day. By eating ${computedTargets.targetCalories} kcal (a ${diffAbs} kcal deficit), your body is forced to burn stored body fat for energy.`
+                      ? `Your body burns ${restingBurn} kcal at rest. To maintain a ${diffAbs} kcal daily deficit, eating ${computedTargets.targetCalories} kcal combined with daily physical movement burns stored fat steadily to reach ${computedTargets.targetWeightKg} kg.`
                       : isSurplus
-                      ? `Your body burns ${computedTargets.tdee} kcal daily. Eating ${computedTargets.targetCalories} kcal (+${diffAbs} kcal surplus) supplies the extra fuel needed to build new muscle tissue.`
-                      : `Your body burns ${computedTargets.tdee} kcal daily. Eating ${computedTargets.targetCalories} kcal maintains your weight while body recomposition reshapes your physique.`}
+                      ? `Your body burns ${restingBurn} kcal at rest. Eating ${computedTargets.targetCalories} kcal (+${diffAbs} kcal surplus) provides the extra energy required to build new lean muscle.`
+                      : `Your body burns ${restingBurn} kcal at rest. Eating ${computedTargets.targetCalories} kcal maintains your weight while body recomposition reshapes your physique.`}
                   </p>
-                </div>
-
-                {/* RESTING BMR NOTE (Simple translation for everyday users) */}
-                <div className="flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <span>Resting Burn (Calories burned at complete rest in bed):</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{computedTargets.bmr} kcal</span>
                 </div>
 
                 {/* MACROS BREAKDOWN */}
