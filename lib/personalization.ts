@@ -2,6 +2,7 @@ import {
   UserProfile,
   BMICategory,
   AgeGroup,
+  FitnessGoal,
   DailyMealPlan,
   WorkoutPlan,
   WorkoutDay,
@@ -106,13 +107,8 @@ export function computePersonalizedTargets(params: Partial<UserProfile>): UserPr
   const tdee = calculateTDEE(bmr, activityLevel);
   const ageGroup = getAgeGroup(age);
 
-  // Automatically align goal with target weight if user set a lower or higher target
-  let effectiveGoal = goal;
-  if (targetWeightKg < weightKg - 0.5) {
-    effectiveGoal = 'lose_fat';
-  } else if (targetWeightKg > weightKg + 0.5) {
-    effectiveGoal = 'gain_muscle';
-  }
+  // Always honor the user's explicitly chosen fitness goal
+  const effectiveGoal: FitnessGoal = goal || 'lose_fat';
 
   // Caloric adjustment based on goal and BMI safety bounds
   let targetCalories = tdee;
@@ -122,34 +118,59 @@ export function computePersonalizedTargets(params: Partial<UserProfile>): UserPr
   if (effectiveGoal === 'lose_fat') {
     // Evidence-based 20-25% deficit below TDEE
     const deficitPercentage = bmiCategory === 'obese' || bmiCategory === 'overweight' ? 0.22 : 0.18;
-    const deficitKcal = Math.max(500, Math.round(tdee * deficitPercentage));
+    const deficitKcal = Math.max(450, Math.round(tdee * deficitPercentage));
     targetCalories = Math.round(tdee - deficitKcal);
 
-    // Physiological ceiling for realistic, steady fat loss (avoids inflated 3,000+ kcal targets for 100kg users)
+    // Physiological ceiling for realistic, steady fat loss
     const maxFatLossCap = gender === 'female' ? 1950 : 2350;
     if (targetCalories > maxFatLossCap) {
       targetCalories = maxFatLossCap;
     }
     const minFloor = gender === 'female' ? 1250 : 1500;
     if (targetCalories < minFloor) targetCalories = minFloor;
+
+    safetyAdvice.push(
+      `Fat-Loss Protocol: Sustainable ${deficitKcal} kcal deficit below TDEE (${tdee} kcal). High protein protects your lean muscle while burning fat.`
+    );
   } else if (effectiveGoal === 'gain_muscle') {
-    // Lean surplus: 250-350 kcal
-    const surplus = bmiCategory === 'underweight' ? 350 : 250;
-    targetCalories = tdee + surplus;
+    if (targetWeightKg < weightKg - 0.5) {
+      // Body Recomposition: building muscle / lean hypertrophy while shedding fat
+      const recompDeficit = Math.round(tdee * 0.10); // mild 10% deficit
+      targetCalories = Math.max(1600, Math.round(tdee - recompDeficit));
+      safetyAdvice.push(
+        `Lean Hypertrophy & Recomp: User target is lighter than current weight. High protein (2.0g/kg) and progressive overload stimulates muscle hypertrophy while burning fat.`
+      );
+    } else {
+      // Clean Mass Surplus: 250-350 kcal
+      const surplus = bmiCategory === 'underweight' ? 350 : 250;
+      targetCalories = Math.round(tdee + surplus);
+      safetyAdvice.push(
+        `Muscle Hypertrophy Protocol: Controlled lean surplus of +${surplus} kcal above TDEE (${tdee} kcal) to maximize muscle protein synthesis with minimal fat gain.`
+      );
+    }
+  } else if (effectiveGoal === 'maintain') {
+    targetCalories = Math.round(tdee);
+    safetyAdvice.push(
+      `Body Recomposition / Maintenance: Calorie target matched to your TDEE (${tdee} kcal). Focus on consistent resistance training and protein pacing.`
+    );
   } else {
-    targetCalories = tdee;
+    // general_health
+    targetCalories = Math.round(tdee);
+    safetyAdvice.push(
+      `Longevity & Heart Health: Balanced maintenance intake at ${tdee} kcal with anti-inflammatory whole foods and daily movement.`
+    );
   }
 
   // Protein targets based on goal and bodyweight
-  // Fat loss: 1.8-2.2g/kg (to preserve lean muscle mass during deficit via mTOR stimulus)
-  // Muscle gain: 1.8-2.2g/kg
-  // Health/Maintenance: 1.2-1.6g/kg
   let proteinPerKg = 1.4;
-  if (effectiveGoal === 'lose_fat' || effectiveGoal === 'gain_muscle') {
+  if (effectiveGoal === 'gain_muscle') {
+    proteinPerKg = targetWeightKg < weightKg - 0.5 ? 2.0 : 1.9;
+  } else if (effectiveGoal === 'lose_fat') {
     proteinPerKg = 1.8;
+  } else if (effectiveGoal === 'maintain') {
+    proteinPerKg = 1.6;
   }
   if (ageGroup === 'seniors') {
-    // Seniors require slightly higher protein efficiency for muscle retention
     proteinPerKg = Math.max(proteinPerKg, 1.5);
   }
 
@@ -266,251 +287,479 @@ export function computePersonalizedTargets(params: Partial<UserProfile>): UserPr
  * Generate customized diet meal plan based on profile
  */
 export function generateMealPlan(profile: UserProfile): DailyMealPlan {
-  const { dietPreference, cuisinePreference, targetCalories, proteinGrams } = profile;
+  const { goal, dietPreference, cuisinePreference, targetCalories, proteinGrams } = profile;
 
-  // Regional options generator
   const isNorthIndian = cuisinePreference === 'north_indian';
   const isSouthIndian = cuisinePreference === 'south_indian';
+  const isMuscleGain = goal === 'gain_muscle';
+  const isFatLoss = goal === 'lose_fat';
+  const isNonVeg = dietPreference === 'non_veg' || dietPreference === 'eggetarian';
+  const isVegan = dietPreference === 'vegan';
+  const isVeg = !isNonVeg && !isVegan;
 
-  // Base structures customized by diet & cuisine
-  if (dietPreference === 'veg') {
+  const cuisineLabel = isNorthIndian ? 'North Indian / Punjabi' : isSouthIndian ? 'South Indian' : 'Continental';
+
+  // 1. HYPERTROPHY & MUSCLE BUILDING PROTOCOL
+  if (isMuscleGain) {
+    const dietType = isVegan ? 'Plant-Powered Vegan' : isNonVeg ? 'High-Protein Non-Veg' : 'Lacto-Vegetarian';
     return {
-      title: `${isNorthIndian ? 'North Indian / Punjabi' : isSouthIndian ? 'South Indian' : 'Wholesome'} Vegetarian Plan`,
+      title: `${cuisineLabel} Muscle Hypertrophy Protocol (${dietType})`,
       totalCalories: targetCalories,
       totalProtein: proteinGrams,
       totalCarbs: profile.carbGrams,
       totalFats: profile.fatGrams,
       meals: {
         earlyMorning: {
-          name: 'Warm Lemon Water + 5 Soaked Almonds + 2 Walnuts',
-          nameHi: 'हल्का गुनगुना नींबू पानी + 5 भीगे बादाम + 2 अखरोट',
-          namePa: 'ਕੋਸਾ ਨਿੰਬੂ ਪਾਣੀ + 5 ਭਿੱਜੇ ਬਦਾਮ + 2 ਅਖਰੋਟ',
-          portion: '1 glass + handful',
-          calories: 110,
-          protein: 4,
-          carbs: 4,
+          name: 'Warm Turmeric Almond Milk + 6 Soaked Almonds + 2 Walnuts + 1 Banana',
+          nameHi: 'हल्का गुनगुना हल्दी-बादाम दूध + 6 भीगे बादाम + 2 अखरोट + 1 केला',
+          namePa: 'ਕੋਸਾ ਹਲਦੀ ਬਦਾਮ ਦੁੱਧ + 6 ਭਿੱਜੇ ਬਦਾਮ + 2 ਅਖਰੋਟ + 1 ਕੇਲਾ',
+          portion: '1 cup milk + 1 banana + nuts',
+          calories: 220,
+          protein: 6,
+          carbs: 32,
           fats: 9,
-          alternatives: ['Chia seed water', 'Jeera / Fennel seed detox tea'],
-          notes: 'Kicks off metabolism and provides healthy brain fats.',
+          alternatives: ['Sattu protein shake in chilled water', 'Overnight chia pudding with oats'],
+          notes: 'Pre-breakfast amino and carbohydrate priming to halt overnight muscular breakdown.',
         },
-        breakfast: isNorthIndian
+        breakfast: isNonVeg
           ? {
-              name: '2 Stuffed Paneer/Besan Chilla with Mint Chutney OR High-Protein Sprouts Chaat',
-              nameHi: '2 बेसन या पनीर चीला पुदीना चटनी के साथ या स्प्राउट्स चाट',
-              namePa: '2 ਵੇਸਣ ਜਾਂ ਪਨੀਰ ਚੀਲਾ ਪੁਦੀਨੇ ਦੀ ਚਟਨੀ ਨਾਲ ਜਾਂ ਸਪ੍ਰਾਊਟਸ ਚਾਟ',
-              portion: '2 chillas (approx 180g) + 2 tbsp chutney',
-              calories: Math.round(targetCalories * 0.26),
-              protein: Math.round(proteinGrams * 0.28),
-              carbs: Math.round(profile.carbGrams * 0.24),
-              fats: Math.round(profile.fatGrams * 0.26),
-              alternatives: [
-                'Tofu bhurji with 2 multigrain rotis',
-                'Oats cooked in low-fat milk with pumpkin seeds',
-              ],
-              notes: 'Rich in fiber and sustained complex carbs to prevent mid-day slumps.',
+              name: '4 Whole Egg / White Scramble with Spinach & Mushrooms + 3 Slices Sourdough / Multigrain Toast + 1 Banana',
+              nameHi: '4 अंडों का ऑमलेट हरी सब्जियों के साथ + 3 मल्टीग्रेन टोस्ट + 1 केला',
+              namePa: '4 ਆਂਡਿਆਂ ਦਾ ਆਮਲੇਟ ਸਬਜ਼ੀਆਂ ਨਾਲ + 3 ਮਲਟੀਗ੍ਰੇਨ ਟੋਸਟ + 1 ਕੇਲਾ',
+              portion: '4 eggs (2 whole, 2 whites) + 3 toasts',
+              calories: Math.round(targetCalories * 0.28),
+              protein: Math.round(proteinGrams * 0.32),
+              carbs: Math.round(profile.carbGrams * 0.28),
+              fats: Math.round(profile.fatGrams * 0.25),
+              alternatives: ['Protein pancake stack with Greek yogurt', 'Boiled eggs with sweet potato chaat'],
+              notes: 'Complete bioavailable amino acids trigger maximum muscle protein synthesis (MPS).',
             }
-          : isSouthIndian
+          : isVegan
           ? {
-              name: '3 Steamed Idlis or 1 Oats Dosa with Sambar + Peanut Chutney (moderated)',
-              nameHi: '3 इडली या ओट्स डोसा सांभर व पीनट चटनी के साथ',
-              namePa: '3 ਇਡਲੀ ਜਾਂ ਓਟਸ ਡੋਸਾ ਸਾਂਭਰ ਅਤੇ ਚਟਨੀ ਨਾਲ',
-              portion: '3 idlis + 1 bowl dal-rich sambar',
-              calories: Math.round(targetCalories * 0.25),
-              protein: Math.round(proteinGrams * 0.24),
-              carbs: Math.round(profile.carbGrams * 0.27),
-              fats: Math.round(profile.fatGrams * 0.22),
-              alternatives: ['Pesarattu (Moong dal dosa) with ginger chutney', 'Quinoa Upma with mixed vegetables'],
-              notes: 'Fermented foods support healthy gut flora.',
+              name: '180g Tofu & Soya Granule Bhurji with Bell Peppers + 3 Multigrain Rotis + 1 Glass Soy Milk',
+              nameHi: '180g टोफू भुर्जी शिमला मिर्च के साथ + 3 रोटी + 1 ग्लास सोया मिल्क',
+              namePa: '180g ਟੋਫੂ ਭੁਰਜੀ ਸ਼ਿਮਲਾ ਮਿਰਚਾਂ ਨਾਲ + 3 ਰੋਟੀਆਂ + ਸੋਇਆ ਦੁੱਧ',
+              portion: '180g tofu + 3 rotis + soy milk',
+              calories: Math.round(targetCalories * 0.28),
+              protein: Math.round(proteinGrams * 0.30),
+              carbs: Math.round(profile.carbGrams * 0.28),
+              fats: Math.round(profile.fatGrams * 0.24),
+              alternatives: ['Peanut butter banana oatmeal with pumpkin seeds', 'Sprouted moong & tofu wrap'],
+              notes: 'Combines multiple plant proteins for a full essential amino acid spectrum.',
+            }
+          : isNorthIndian
+          ? {
+              name: '150g Fresh Paneer Bhurji + 2–3 Multigrain Phulkas / Parathas + 1 Cup Low-Fat Curd OR Whey Oatmeal with Banana',
+              nameHi: '150g पनीर भुर्जी + 2-3 मल्टीग्रेन रोटी/परांठे + 1 कटोरी ताजा दही',
+              namePa: '150g ਪਨੀਰ ਭੁਰਜੀ + 2-3 ਮਲਟੀਗ੍ਰੇਨ ਰੋਟੀਆਂ/ਪਰੌਂਠੇ + 1 ਕੌਲੀ ਤਾਜ਼ਾ ਦਹੀਂ',
+              portion: '150g fresh paneer + 2-3 rotis + 150g curd',
+              calories: Math.round(targetCalories * 0.28),
+              protein: Math.round(proteinGrams * 0.30),
+              carbs: Math.round(profile.carbGrams * 0.28),
+              fats: Math.round(profile.fatGrams * 0.26),
+              alternatives: ['Soya bhurji with 3 rotis and lassi', 'Protein oats with peanut butter and pumpkin seeds'],
+              notes: 'Over 3g of leucine triggers muscle protein synthesis for lean hypertrophy.',
             }
           : {
-              name: 'Greek Yogurt Bowl with Berries, Chia Seeds & Rolled Oats',
-              nameHi: 'ग्रीक योगर्ट बाउल बेरीज़, चिया सीड्स व ओट्स के साथ',
-              namePa: 'ਗ੍ਰੀਕ ਦਹੀਂ ਬਾਊਲ ਬੇਰੀਆਂ, ਚੀਆ ਬੀਜ ਅਤੇ ਓਟਸ ਨਾਲ',
-              portion: '200g Greek yogurt + 40g oats',
-              calories: Math.round(targetCalories * 0.25),
+              name: '3 Steamed Idlis with Sambar + 1 Cup High-Protein Curd / Paneer Toss + Coconut Chutney',
+              nameHi: '3 इडली सांभर के साथ + 1 कटोरी पनीर / दही + चटनी',
+              namePa: '3 ਇਡਲੀ ਸਾਂਭਰ ਨਾਲ + 1 ਕੌਲੀ ਪਨੀਰ / ਦਹੀਂ + ਚਟਨੀ',
+              portion: '3 idlis + sambar + 100g paneer/curd',
+              calories: Math.round(targetCalories * 0.28),
               protein: Math.round(proteinGrams * 0.28),
-              carbs: Math.round(profile.carbGrams * 0.25),
-              fats: Math.round(profile.fatGrams * 0.23),
-              alternatives: ['Protein oatmeal bowl', 'Peanut butter banana wholewheat toast'],
-              notes: 'Probiotic-rich and high-bioavailability protein.',
+              carbs: Math.round(profile.carbGrams * 0.28),
+              fats: Math.round(profile.fatGrams * 0.22),
+              alternatives: ['Pesarattu with paneer stuffing', 'Quinoa upma with edamame and curd'],
+              notes: 'Sustained energy release with gut-friendly fermentation.',
             },
         midMorningSnack: {
-          name: 'Seasonal Fruit (Apple or Papaya) + Roasted Chana (Bengal Gram)',
-          nameHi: 'मौसमी फल (सेब/पपीता) + भुना चना',
-          namePa: 'ਮੌਸਮੀ ਫਲ (ਸੇਬ/ਪਪੀਤਾ) + ਭੁੰਨੇ ਛੋਲੇ',
-          portion: '1 medium fruit + 30g roasted chana',
-          calories: 140,
-          protein: 6,
-          carbs: 24,
-          fats: 2,
-          alternatives: ['Coconut water with tender coconut pulp', 'Buttermilk (Chaas) with roasted cumin'],
-          notes: 'High-fiber snack to curb hunger between meals.',
+          name: 'Hypertrophy Snack: 40g Roasted Bengal Gram (Chana) + 1 Banana + 15 Almonds (OR 1 Scoop Whey/Sattu Drink)',
+          nameHi: '40g भुना चना + 1 केला + 15 बादाम (या 1 स्कूप व्हे/सत्तू प्रोटीन ड्रिंक)',
+          namePa: '40g ਭੁੰਨੇ ਛੋਲੇ + 1 ਕੇਲਾ + 15 ਬਦਾਮ (ਜਾਂ 1 ਸਕੂਪ ਵੇਅ/ਸੱਤੂ ਡ੍ਰਿੰਕ)',
+          portion: '40g chana + 1 fruit + handful nuts',
+          calories: 230,
+          protein: 10,
+          carbs: 34,
+          fats: 6,
+          alternatives: ['Greek yogurt bowl with honey and chia seeds', 'Paneer cubes tossed with chaat masala'],
+          notes: 'Mid-morning anabolic bridge maintaining steady positive nitrogen balance.',
         },
-        lunch: isNorthIndian
+        lunch: isNonVeg
           ? {
-              name: '2 Phulkas (Multigrain/Wheat) + 1 Cup Dal Tadka / Rajma + 1 Bowl Mixed Sabzi + Cucumber Salad',
-              nameHi: '2 फुल्के + 1 कटोरी दाल/राजमा + 1 कटोरी मौसमी सब्ज़ी + सलाद',
-              namePa: '2 ਫੁਲਕੇ + 1 ਕੌਲੀ ਦਾਲ/ਰਾਜਮਾ + 1 ਕੌਲੀ ਸਬਜ਼ੀ + ਖੀਰਾ ਸਲਾਦ',
-              portion: '2 rotis + 150g dal + 100g sabzi + raw salad',
+              name: '200g Grilled Chicken Breast / Fish Curry + 1.5 Cups Steamed Rice / 3 Rotis + 1 Bowl Dal + Steamed Greens',
+              nameHi: '200g ग्रिल्ड चिकन / फिश करी + 1.5 कप चावल / 3 रोटी + दाल + हरी सब्जियां',
+              namePa: '200g ਗ੍ਰਿਲਡ ਚਿਕਨ / ਮੱਛੀ ਕਰੀ + 1.5 ਕੱਪ ਚੌਲ / 3 ਰੋਟੀਆਂ + ਦਾਲ + ਸਬਜ਼ੀ',
+              portion: '200g meat + 150g rice/3 rotis + 150g dal',
               calories: Math.round(targetCalories * 0.33),
-              protein: Math.round(proteinGrams * 0.32),
-              carbs: Math.round(profile.carbGrams * 0.33),
-              fats: Math.round(profile.fatGrams * 0.3),
-              alternatives: [
-                '1 cup brown rice + Chole (chickpea curry) + cucumber raita',
-                'Quinoa pulao with low-fat paneer cubes and broccoli',
-              ],
-              notes: 'Pairing legumes with grains provides a complete amino acid profile.',
+              protein: Math.round(proteinGrams * 0.35),
+              carbs: Math.round(profile.carbGrams * 0.32),
+              fats: Math.round(profile.fatGrams * 0.25),
+              alternatives: ['Chicken tikka brown rice bowl', 'Fish curry with quinoa and green salad'],
+              notes: 'High-density protein and glycogen-restoring complex carbs.',
             }
           : {
-              name: '1 Cup Brown Rice / 2 Rotis + Sambar / Dal + Stir-Fried Greens (Poriyal) + Curd',
-              nameHi: '1 कप ब्राउन राइस/रोटी + सांभर + पोरियाल सब्ज़ी + दही',
-              namePa: '1 ਕੱਪ ਬ੍ਰਾਊਨ ਚੌਲ/ਰੋਟੀ + ਸਾਂਭਰ + ਹਰੀ ਸਬਜ਼ੀ + ਦਹੀਂ',
-              portion: '1 cup cooked rice/2 rotis + 150g dal + 100g greens',
+              name: '3-4 Phulkas OR 1.5 Cups Steamed Basmati Rice + 150g Soya Chunks or Low-Fat Paneer Curry + 1 Bowl Thick Dal + Cucumber Raita',
+              nameHi: '3-4 फुल्के या चावल + 150g सोया चंक्स/पनीर करी + गाढ़ी दाल तड़का + खीरा रायता',
+              namePa: '3-4 ਫੁਲਕੇ ਜਾਂ ਚੌਲ + 150g ਸੋਇਆ ਚੰਕਸ/ਪਨੀਰ ਕਰੀ + ਗਾੜ੍ਹੀ ਦਾਲ + ਖੀਰਾ ਰਾਇਤਾ',
+              portion: '3-4 rotis + 150g soya/paneer curry + 1 bowl dal + raita',
               calories: Math.round(targetCalories * 0.33),
-              protein: Math.round(proteinGrams * 0.3),
+              protein: Math.round(proteinGrams * 0.33),
               carbs: Math.round(profile.carbGrams * 0.34),
-              fats: Math.round(profile.fatGrams * 0.28),
-              alternatives: ['Millet khichdi with curd and spinach', 'Lentil soup bowl with roasted vegetables'],
-              notes: 'Easily digestible and antioxidant dense.',
+              fats: Math.round(profile.fatGrams * 0.26),
+              alternatives: ['Rajma chawal with 100g grilled paneer', 'Chole with brown rice and cucumber raita'],
+              notes: 'Complete essential amino acid profile through legume and grain pairing.',
             },
         eveningSnack: {
-          name: 'Spiced Buttermilk (Chaas) or Green Tea + Handful of Makhana (Foxnuts)',
-          nameHi: 'छाछ या ग्रीन टी + भुना मखाना',
-          namePa: 'ਮਸਾਲੇ ਵਾਲੀ ਲੱਸੀ ਜਾਂ ਗ੍ਰੀਨ ਟੀ + ਭੁੰਨੇ ਮਖਾਣੇ',
-          portion: '1 glass chaas + 25g roasted makhana',
-          calories: 120,
-          protein: 5,
-          carbs: 18,
-          fats: 3,
-          alternatives: ['Boiled edamame beans', 'Roasted soya beans snack'],
-          notes: 'Low glycemic index and calcium-dense.',
+          name: 'Pre-Workout Fuel: 2 Wholewheat Toasts with Peanut Butter + 1 Banana OR Spiced Buttermilk with 30g Roasted Peanuts',
+          nameHi: 'प्री-वर्कआउट: 2 टोस्ट पीनट बटर व केले के साथ या छाछ + 30g भुनी मूंगफली',
+          namePa: 'ਪ੍ਰੀ-ਵਰਕਆਊਟ: 2 ਟੋਸਟ ਪੀਨਟ ਬਟਰ ਤੇ ਕੇਲੇ ਨਾਲ ਜਾਂ ਲੱਸੀ + 30g ਭੁੰਨੀ ਮੂੰਗਫਲੀ',
+          portion: '2 toasts + 1 tbsp peanut butter + banana',
+          calories: 220,
+          protein: 9,
+          carbs: 32,
+          fats: 7,
+          alternatives: ['Whey protein scoop with water and 1 apple', 'Boiled sweet potato with pinch of chaat masala'],
+          notes: 'Fast-acting complex carbohydrates and potassium boost intracellular hydration and muscle pumps.',
         },
-        dinner: {
-          name: 'Grilled Low-Fat Paneer / Tofu Stir-Fry (150g) with Colorful Bell Peppers + 1 Small Roti / Soup',
-          nameHi: 'ग्रिल्ड पनीर/टोफू शिमला मिर्च के साथ + 1 हल्की रोटी या सूप',
-          namePa: 'ਭੁੰਨਿਆ ਪਨੀਰ/ਟੋਫੂ ਸ਼ਿਮਲਾ ਮਿਰਚਾਂ ਨਾਲ + 1 ਫੁਲਕਾ ਜਾਂ ਸੂਪ',
-          portion: '150g paneer/tofu + veggies + 1 phulka',
-          calories: Math.round(targetCalories * 0.26),
-          protein: Math.round(proteinGrams * 0.28),
-          carbs: Math.round(profile.carbGrams * 0.23),
-          fats: Math.round(profile.fatGrams * 0.28),
-          alternatives: [
-            'Warm lentil and vegetable stew with crushed walnuts',
-            'Moong dal khichdi with ghee tempering and roasted papad',
-          ],
-          notes: 'Light on carbs before sleeping to promote restorative digestion and human growth hormone release.',
-        },
+        dinner: isNonVeg
+          ? {
+              name: '200g Lemon Garlic Chicken or Egg Curry + 2 Multigrain Phulkas + 1 Bowl Dal + Mixed Green Salad',
+              nameHi: '200g लेमन चिकन या अंडा करी + 2 फुल्के + 1 कटोरी दाल + सलाद',
+              namePa: '200g ਲੈਮਨ ਚਿਕਨ ਜਾਂ ਆਂਡਾ ਕਰੀ + 2 ਫੁਲਕੇ + 1 ਕੌਲੀ ਦਾਲ + ਸਲਾਦ',
+              portion: '200g chicken/curry + 2 rotis + salad',
+              calories: Math.round(targetCalories * 0.25),
+              protein: Math.round(proteinGrams * 0.28),
+              carbs: Math.round(profile.carbGrams * 0.22),
+              fats: Math.round(profile.fatGrams * 0.24),
+              alternatives: ['Grilled fish with tossed vegetables and 1 roti', 'Chicken clear soup with shredded chicken breast and rice'],
+              notes: 'Promotes sustained overnight myofibrillar repair.',
+            }
+          : {
+              name: '180g Low-Fat Grilled Paneer / Tofu Tikka with Sautéed Capsicum & Onions + 2 Multigrain Phulkas + 1 Bowl Moong Dal',
+              nameHi: '180g ग्रिल्ड पनीर/टोफू टिक्का शिमला मिर्च के साथ + 2 फुल्के + 1 कटोरी मूंग दाल',
+              namePa: '180g ਭੁੰਨਿਆ ਪਨੀਰ/ਟੋਫੂ ਟਿੱਕਾ ਸ਼ਿਮਲਾ ਮਿਰਚਾਂ ਨਾਲ + 2 ਫੁਲਕੇ + 1 ਕੌਲੀ ਮੂੰਗ ਦਾਲ',
+              portion: '180g paneer/tofu + 2 rotis + dal',
+              calories: Math.round(targetCalories * 0.25),
+              protein: Math.round(proteinGrams * 0.28),
+              carbs: Math.round(profile.carbGrams * 0.22),
+              fats: Math.round(profile.fatGrams * 0.25),
+              alternatives: ['Soya granule curry with 2 rotis and mint chutney', 'Moong dal khichdi with 100g paneer cubes'],
+              notes: 'Slow-digesting casein and legumes deliver steady amino acids throughout the night.',
+            },
         bedtime: {
-          name: 'Warm Turmeric Cinnamon Milk (Low-Fat or Almond Milk)',
-          nameHi: 'हल्का गुनगुना हल्दी और दालचीनी वाला दूध',
-          namePa: 'ਕੋਸਾ ਹਲਦੀ ਅਤੇ ਦਾਲਚੀਨੀ ਵਾਲਾ ਦੁੱਧ',
-          portion: '1 small cup (150ml)',
-          calories: 80,
-          protein: 4,
-          carbs: 7,
-          fats: 3,
-          alternatives: ['Chamomile herbal tea', 'Ashwagandha warm infusion'],
-          notes: 'Curcumin + casein aids deep tissue repair and calm sleep.',
+          name: 'Warm Turmeric Cinnamon Milk with 4 Crushed Almonds',
+          nameHi: 'हल्का गुनगुना हल्दी-दालचीनी दूध + 4 कुटे हुए बादाम',
+          namePa: 'ਕੋਸਾ ਹਲਦੀ ਦਾਲਚੀਨੀ ਵਾਲਾ ਦੁੱਧ + 4 ਬਦਾਮ',
+          portion: '1 small cup (180ml)',
+          calories: 110,
+          protein: 6,
+          carbs: 8,
+          fats: 4,
+          alternatives: ['Warm almond milk with ashwagandha', 'Chamomile herbal tea with raw honey'],
+          notes: 'Curcumin + casein accelerates joint recovery and deep sleep hormonal regeneration.',
         },
       },
-      hydrationTips: `Aim for ${profile.waterIntakeLiters} Liters of water daily. Drink 1 glass 30 mins before major meals to aid satiety and enzyme secretion.`,
+      hydrationTips: `Aim for ${profile.waterIntakeLiters} Liters of water daily. Drink 500ml 1 hour before heavy training for optimal cellular hydration.`,
       cookingTips: [
-        'Measure cooking oil with a teaspoon (limit to 3–4 tsp/day) rather than pouring freely from the bottle.',
+        'Use moderate cooking oil (3-4 tsp/day) and prioritize cold-pressed mustard or coconut oil for healthy calories.',
+        'Ensure daily protein is evenly divided into 4-5 feedings to maximize muscle protein synthesis pulses.',
+      ],
+    };
+  }
+
+  // 2. FAT-LOSS DEFICIT & HIGH-SATIETY PROTOCOL
+  if (isFatLoss) {
+    const dietType = isVegan ? 'Plant-Powered Vegan' : isNonVeg ? 'Lean Protein Non-Veg' : 'Vegetarian Satiety';
+    return {
+      title: `${cuisineLabel} Fat-Loss Deficit & Satiety Protocol (${dietType})`,
+      totalCalories: targetCalories,
+      totalProtein: proteinGrams,
+      totalCarbs: profile.carbGrams,
+      totalFats: profile.fatGrams,
+      meals: {
+        earlyMorning: {
+          name: 'Warm Lemon Water with Soaked Chia Seeds + 4 Soaked Almonds',
+          nameHi: 'हल्का गुनगुना नींबू पानी + भीगे चिया सीड्स + 4 भीगे बादाम',
+          namePa: 'ਕੋਸਾ ਨਿੰਬੂ ਪਾਣੀ + ਭਿੱਜੇ ਚੀਆ ਬੀਜ + 4 ਭਿੱਜੇ ਬਦਾਮ',
+          portion: '1 glass + 1 tbsp chia + 4 almonds',
+          calories: 85,
+          protein: 3,
+          carbs: 4,
+          fats: 6,
+          alternatives: ['Apple cider vinegar in warm water', 'Cumin & fennel seed detox infusion'],
+          notes: 'Prebiotic soluble fiber expands in stomach, significantly delaying early morning hunger.',
+        },
+        breakfast: isNonVeg
+          ? {
+              name: '3 Egg Whites + 1 Whole Egg Omelette with Spinach, Tomatoes & Mushrooms + 1 Slice Multigrain Toast',
+              nameHi: '3 अंडे की सफेदी + 1 पूरा अंडा ऑमलेट पालक-टमाटर के साथ + 1 मल्टीग्रेन टोस्ट',
+              namePa: '3 ਆਂਡੇ ਦੀ ਸਫੇਦੀ + 1 ਪੂਰਾ ਆਂਡਾ ਆਮਲੇਟ ਪਾਲਕ-ਟਮਾਟਰ ਨਾਲ + 1 ਮਲਟੀਗ੍ਰੇਨ ਟੋਸਟ',
+              portion: '4-egg omelette + 1 toast',
+              calories: Math.round(targetCalories * 0.25),
+              protein: Math.round(proteinGrams * 0.30),
+              carbs: Math.round(profile.carbGrams * 0.20),
+              fats: Math.round(profile.fatGrams * 0.24),
+              alternatives: ['Boiled egg white salad with cucumber and lemon dressing', 'Smoked salmon with 1 multigrain toast'],
+              notes: 'Ultra-high satiety-to-calorie ratio; prevents mid-morning energy dips.',
+            }
+          : isNorthIndian
+          ? {
+              name: '2 Stuffed Besan or Moong Dal Chillas with Low-Fat Paneer (50g) + Fresh Mint Chutney + 1 Bowl Sprout Salad',
+              nameHi: '2 बेसन/मूंग दाल चीला हल्के पनीर के साथ + पुदीना चटनी + स्प्राउट सलाद',
+              namePa: '2 ਵੇਸਣ/ਮੂੰਗ ਦਾਲ ਚੀਲਾ ਪਨੀਰ ਨਾਲ + ਪੁਦੀਨਾ ਚਟਨੀ + ਸਪ੍ਰਾਊਟ ਸਲਾਦ',
+              portion: '2 chillas (approx 160g) + 60g sprouts',
+              calories: Math.round(targetCalories * 0.25),
+              protein: Math.round(proteinGrams * 0.28),
+              carbs: Math.round(profile.carbGrams * 0.22),
+              fats: Math.round(profile.fatGrams * 0.22),
+              alternatives: ['Tofu scramble with 1 multigrain roti and black coffee', 'Vegetable oats porridge with chia seeds'],
+              notes: 'High volume and fiber blunt ghrelin secretion for 4–5 continuous hours.',
+            }
+          : {
+              name: '2 Steamed Idlis or 1 Oats Dosa with Vegetable Sambar + High-Protein Moong Sprouts',
+              nameHi: '2 इडली या ओट्स डोसा सांभर व मूंग स्प्राउट्स के साथ',
+              namePa: '2 ਇਡਲੀ ਜਾਂ ਓਟਸ ਡੋਸਾ ਸਾਂਭਰ ਅਤੇ ਮੂੰਗ ਸਪ੍ਰਾਊਟਸ ਨਾਲ',
+              portion: '2 idlis + 1 bowl sambar + sprouts',
+              calories: Math.round(targetCalories * 0.25),
+              protein: Math.round(proteinGrams * 0.26),
+              carbs: Math.round(profile.carbGrams * 0.24),
+              fats: Math.round(profile.fatGrams * 0.18),
+              alternatives: ['Pesarattu with ginger chutney', 'Quinoa upma with green peas and curd'],
+              notes: 'Low glycemic index carb sources maintain stable insulin and fat-burning state.',
+            },
+        midMorningSnack: {
+          name: '1 Bowl Fresh Papaya or 1 Crisp Apple + 1 Cup Unsweetened Green Tea',
+          nameHi: '1 कटोरी पपीता या 1 हरा सेब + 1 कप बिना चीनी की ग्रीन टी',
+          namePa: '1 ਕੌਲੀ ਪਪੀਤਾ ਜਾਂ 1 ਹਰਾ ਸੇਬ + 1 ਕੱਪ ਗ੍ਰੀਨ ਟੀ',
+          portion: '150g fruit + green tea',
+          calories: 95,
+          protein: 2,
+          carbs: 22,
+          fats: 0.5,
+          alternatives: ['Cucumber slices sprinkled with chaat masala', 'Coconut water with tender coconut flesh'],
+          notes: 'Green tea catechins (EGCG) promote mitochondrial fat oxidation during activity.',
+        },
+        lunch: isNonVeg
+          ? {
+              name: '160g Grilled Lemon-Herb Chicken Breast + Huge Tossed Green Salad FIRST + 1 Cup Steamed Brown Rice or 1 Phulka',
+              nameHi: '160g ग्रिल्ड चिकन + बड़ा हरा सलाद पहले + 1 कप ब्राउन राइस या 1 रोटी',
+              namePa: '160g ਗ੍ਰਿਲਡ ਚਿਕਨ + ਵੱਡਾ ਹਰਾ ਸਲਾਦ ਪਹਿਲਾਂ + 1 ਕੱਪ ਬ੍ਰਾਊਨ ਚੌਲ ਜਾਂ 1 ਰੋਟੀ',
+              portion: '160g chicken + large salad + 1 cup rice/1 roti',
+              calories: Math.round(targetCalories * 0.34),
+              protein: Math.round(proteinGrams * 0.35),
+              carbs: Math.round(profile.carbGrams * 0.30),
+              fats: Math.round(profile.fatGrams * 0.24),
+              alternatives: ['Tuna salad with lemon vinaigrette and 1 slice toast', 'Fish curry with steamed cauliflower rice'],
+              notes: 'Lean protein preserves skeletal muscle while body runs in caloric deficit.',
+            }
+          : {
+              name: 'High-Volume Protocol: 1 Large Plate Raw Salad FIRST + 2 Multigrain Phulkas (No Ghee) + 1.5 Bowls Yellow Dal + 1 Bowl Stir-Fried Gobhi/Beans',
+              nameHi: 'बड़ा खीरा-टमाटर सलाद पहले + 2 सादी रोटी (बिना घी) + 1.5 कटोरी पतली दाल + हरी सब्ज़ी',
+              namePa: 'ਵੱਡਾ ਖੀਰਾ-ਟਮਾਟਰ ਸਲਾਦ ਪਹਿਲਾਂ + 2 ਸਾਦੀਆਂ ਰੋਟੀਆਂ (ਬਿਨਾਂ ਘਿਓ) + 1.5 ਕੌਲੀ ਦਾਲ + ਸਬਜ਼ੀ',
+              portion: 'Pre-meal salad + 2 rotis + 200g dal + 100g sabzi',
+              calories: Math.round(targetCalories * 0.34),
+              protein: Math.round(proteinGrams * 0.30),
+              carbs: Math.round(profile.carbGrams * 0.33),
+              fats: Math.round(profile.fatGrams * 0.24),
+              alternatives: ['1 cup brown rice + 150g soya chunks curry + cucumber raita', 'Quinoa khichdi with plenty of spinach and curd'],
+              notes: 'Pre-loading high-water fiber salad stretches gastric walls, reducing total calorie intake by 20% naturally.',
+            },
+        eveningSnack: {
+          name: 'Craving Killer: 1 Glass Spiced Buttermilk (Chaas) with Jeera + 25g Dry-Roasted Foxnuts (Makhana)',
+          nameHi: '1 गिलास जीरा-पुदीना छाछ + 25g भुना मखाना',
+          namePa: '1 ਗਿਲਾਸ ਜੀਰਾ ਮਸਾਲਾ ਲੱਸੀ + 25g ਭੁੰਨੇ ਮਖਾਣੇ',
+          portion: '250ml chaas + 25g makhana',
+          calories: 105,
+          protein: 5,
+          carbs: 16,
+          fats: 2,
+          alternatives: ['Black coffee / Green tea with 20g roasted chana', 'Boiled edamame beans with pinch of salt'],
+          notes: 'Zero added sugar and high electrolyte hydration prevents afternoon sugar cravings.',
+        },
+        dinner: isNonVeg
+          ? {
+              name: '160g Steamed Fish Curry or Chicken Clear Soup with Tossed Green Beans & Zucchini (Low-Carb Night)',
+              nameHi: '160g स्टीम्ड फिश करी या चिकन क्लियर सूप हरी सब्जियों के साथ',
+              namePa: '160g ਸਟੀਮਡ ਮੱਛੀ ਜਾਂ ਚਿਕਨ ਸੂਪ ਹਰੀਆਂ ਸਬਜ਼ੀਆਂ ਨਾਲ',
+              portion: '160g fish/chicken + 150g vegetables',
+              calories: Math.round(targetCalories * 0.25),
+              protein: Math.round(proteinGrams * 0.28),
+              carbs: Math.round(profile.carbGrams * 0.18),
+              fats: Math.round(profile.fatGrams * 0.22),
+              alternatives: ['Grilled chicken salad with apple cider vinaigrette', 'Egg white bhurji (4 whites) with 1 light phulka'],
+              notes: 'Controlled nighttime carbohydrates encourage nocturnal lipolysis (fat mobilization).',
+            }
+          : {
+              name: '150g Low-Fat Grilled Paneer / Soya Chunks Bhurji with Bell Peppers & Cabbage + 1 Light Phulka OR Clear Vegetable Soup',
+              nameHi: '150g पनीर या सोया भुर्जी शिमला मिर्च के साथ + 1 हल्की रोटी या वेज सूप',
+              namePa: '150g ਪਨੀਰ ਜਾਂ ਸੋਇਆ ਭੁਰਜੀ ਸ਼ਿਮਲਾ ਮਿਰਚ ਨਾਲ + 1 ਫੁਲਕਾ ਜਾਂ ਵੈੱਜ ਸੂਪ',
+              portion: '150g paneer/soya + veggies + 1 phulka',
+              calories: Math.round(targetCalories * 0.25),
+              protein: Math.round(proteinGrams * 0.28),
+              carbs: Math.round(profile.carbGrams * 0.20),
+              fats: Math.round(profile.fatGrams * 0.24),
+              alternatives: ['Moong dal soup with 100g grilled tofu cubes', 'Lentil stew with shredded cabbage and carrots'],
+              notes: 'Digestive-friendly lean protein ensures restorative sleep without heavy metabolic stress.',
+            },
+        bedtime: {
+          name: 'Warm Chamomile Herbal Infusion (or Warm Water with Lemon & Cinnamon)',
+          nameHi: 'गुनगुनी कैमोमाइल टी (या हल्का गरम पानी दालचीनी के साथ)',
+          namePa: 'ਕੋਸੀ ਕੈਮੋਮਾਈਲ ਚਾਹ (ਜਾਂ ਹਲਕਾ ਗਰਮ ਪਾਣੀ)',
+          portion: '1 cup (150ml)',
+          calories: 15,
+          protein: 0.5,
+          carbs: 2,
+          fats: 0,
+          alternatives: ['Fennel seed warm water', 'Warm water with pinch of pink salt'],
+          notes: 'Lowers evening cortisol spikes and facilitates unbroken deep sleep.',
+        },
+      },
+      hydrationTips: `Target ${profile.waterIntakeLiters} Liters of water daily. Drink 1 glass 30 minutes before each meal to naturally suppress appetite.`,
+      cookingTips: [
+        'Measure cooking oil with a teaspoon (strictly max 2–3 tsp per day) rather than pouring freely from the bottle.',
         'Cook rotis without excess ghee coating; add a single drop directly to dal or subzi if needed.',
         'Use spices like jeera, ajwain, turmeric, and black pepper to boost bioavailability and avoid bloat.',
       ],
     };
   }
 
-  // Non-Veg / Eggetarian / Vegan fallback
-  const isNonVeg = dietPreference === 'non_veg' || dietPreference === 'eggetarian';
+  // 3. MAINTENANCE & LONGEVITY PROTOCOL (Default / General Health / Body Recomposition)
   return {
-    title: `${isNonVeg ? 'High-Protein' : 'Plant-Powered'} ${isNorthIndian ? 'North Indian' : 'Continental'} Plan`,
+    title: `${cuisineLabel} Longevity & Metabolic Balance Protocol (${isVeg ? 'Vegetarian' : isNonVeg ? 'Non-Veg' : 'Plant-Powered'})`,
     totalCalories: targetCalories,
     totalProtein: proteinGrams,
     totalCarbs: profile.carbGrams,
     totalFats: profile.fatGrams,
     meals: {
       earlyMorning: {
-        name: 'Warm Lemon Water + Soaked Walnuts & Chia Seeds',
-        nameHi: 'गुनगुना नींबू पानी + भीगे अखरोट व चिया सीड्स',
-        namePa: 'ਕੋਸਾ ਨਿੰਬੂ ਪਾਣੀ + ਭਿੱਜੇ ਅਖਰੋਟ ਅਤੇ ਚੀਆ ਬੀਜ',
+        name: 'Warm Lemon Water + 5 Soaked Almonds + 2 Walnuts',
+        nameHi: 'हल्का गुनगुना नींबू पानी + 5 भीगे बादाम + 2 अखरोट',
+        namePa: 'ਕੋਸਾ ਨਿੰਬੂ ਪਾਣੀ + 5 ਭਿੱਜੇ ਬਦਾਮ + 2 ਅਖਰੋਟ',
         portion: '1 glass + handful',
-        calories: 120,
+        calories: 110,
         protein: 4,
         carbs: 4,
         fats: 9,
-        alternatives: ['Apple cider vinegar in warm water', 'Green tea with ginger'],
+        alternatives: ['Chia seed water', 'Jeera / Fennel seed detox tea'],
+        notes: 'Kicks off metabolism and provides healthy brain fats.',
       },
-      breakfast: {
-        name: isNonVeg
-          ? '3 Whole Egg / White Omelette with Spinach & Mushrooms + 2 Slices Sourdough / Multigrain Toast'
-          : 'High-Protein Tofu Scramble with Turmeric & Sourdough Toast',
-        nameHi: isNonVeg ? '3 अंडों का ऑमलेट पालक-मशरूम के साथ + 2 मल्टीग्रेन टोस्ट' : 'मसाला टोफू भुर्जी + 2 मल्टीग्रेन टोस्ट',
-        namePa: isNonVeg ? '3 ਆਂਡਿਆਂ ਦਾ ਆਮਲੇਟ ਪਾਲਕ-ਮਸ਼ਰੂਮ ਨਾਲ + 2 ਮਲਟੀਗ੍ਰੇਨ ਟੋਸਟ' : 'ਮਸਾਲਾ ਟੋਫੂ ਭੁਰਜੀ + 2 ਮਲਟੀਗ੍ਰੇਨ ਟੋਸਟ',
-        portion: '3 eggs (or 150g tofu) + 2 toasts',
-        calories: Math.round(targetCalories * 0.28),
-        protein: Math.round(proteinGrams * 0.32),
-        carbs: Math.round(profile.carbGrams * 0.25),
-        fats: Math.round(profile.fatGrams * 0.28),
-        alternatives: ['Protein pancake stack with Greek yogurt', 'Boiled eggs with sweet potato chaat'],
-        notes: 'Optimal leucine threshold reached for muscle protein synthesis (MPS).',
-      },
+      breakfast: isNorthIndian
+        ? {
+            name: '2 Stuffed Paneer/Besan Chillas with Mint Chutney + 1 Bowl High-Protein Sprouts Chaat',
+            nameHi: '2 बेसन या पनीर चीला पुदीना चटनी के साथ + स्प्राउट्स चाट',
+            namePa: '2 ਵੇਸਣ ਜਾਂ ਪਨੀਰ ਚੀਲਾ ਪੁਦੀਨੇ ਦੀ ਚਟਨੀ ਨਾਲ + ਸਪ੍ਰਾਊਟਸ ਚਾਟ',
+            portion: '2 chillas (approx 180g) + 2 tbsp chutney',
+            calories: Math.round(targetCalories * 0.26),
+            protein: Math.round(proteinGrams * 0.28),
+            carbs: Math.round(profile.carbGrams * 0.24),
+            fats: Math.round(profile.fatGrams * 0.26),
+            alternatives: ['Tofu bhurji with 2 multigrain rotis', 'Oats cooked in low-fat milk with pumpkin seeds'],
+            notes: 'Rich in fiber and sustained complex carbs to prevent mid-day slumps.',
+          }
+        : isSouthIndian
+        ? {
+            name: '3 Steamed Idlis or 1 Oats Dosa with Sambar + Peanut Chutney (moderated)',
+            nameHi: '3 इडली या ओट्स डोसा सांभर व पीनट चटनी के साथ',
+            namePa: '3 ਇਡਲੀ ਜਾਂ ਓਟਸ ਡੋਸਾ ਸਾਂਭਰ ਅਤੇ ਚਟਨੀ ਨਾਲ',
+            portion: '3 idlis + 1 bowl dal-rich sambar',
+            calories: Math.round(targetCalories * 0.25),
+            protein: Math.round(proteinGrams * 0.24),
+            carbs: Math.round(profile.carbGrams * 0.27),
+            fats: Math.round(profile.fatGrams * 0.22),
+            alternatives: ['Pesarattu (Moong dal dosa) with ginger chutney', 'Quinoa Upma with mixed vegetables'],
+            notes: 'Fermented foods support healthy gut flora.',
+          }
+        : {
+            name: 'Greek Yogurt Bowl with Berries, Chia Seeds & Rolled Oats',
+            nameHi: 'ग्रीक योगर्ट बाउल बेरीज़, चिया सीड्स व ओट्स के साथ',
+            namePa: 'ਗ੍ਰੀਕ ਦਹੀਂ ਬਾਊਲ ਬੇਰੀਆਂ, ਚੀਆ ਬੀਜ ਅਤੇ ਓਟਸ ਨਾਲ',
+            portion: '200g Greek yogurt + 40g oats',
+            calories: Math.round(targetCalories * 0.25),
+            protein: Math.round(proteinGrams * 0.28),
+            carbs: Math.round(profile.carbGrams * 0.25),
+            fats: Math.round(profile.fatGrams * 0.23),
+            alternatives: ['Protein oatmeal bowl', 'Peanut butter banana wholewheat toast'],
+            notes: 'Probiotic-rich and high-bioavailability protein.',
+          },
       midMorningSnack: {
-        name: '1 Apple or Orange + 15 Almonds',
-        nameHi: '1 सेब या संतरा + 15 बादाम',
-        namePa: '1 ਸੇਬ ਜਾਂ ਸੰਤਰਾ + 15 ਬਦਾਮ',
-        portion: '1 fruit + 15g almonds',
-        calories: 150,
-        protein: 4,
-        carbs: 22,
-        fats: 7,
-        alternatives: ['Cucumber slices with hummus', 'Whey protein shake in water'],
+        name: 'Seasonal Fruit (Apple or Papaya) + Roasted Chana (Bengal Gram)',
+        nameHi: 'मौसमी फल (सेब/पपीता) + भुना चना',
+        namePa: 'ਮੌਸਮੀ ਫਲ (ਸੇਬ/ਪਪੀਤਾ) + ਭੁੰਨੇ ਛੋਲੇ',
+        portion: '1 medium fruit + 30g roasted chana',
+        calories: 140,
+        protein: 6,
+        carbs: 24,
+        fats: 2,
+        alternatives: ['Coconut water with tender coconut pulp', 'Buttermilk (Chaas) with roasted cumin'],
+        notes: 'High-fiber snack to maintain stable blood glucose between meals.',
       },
-      lunch: {
-        name: isNonVeg
-          ? '180g Grilled Chicken Breast / Fish Curry + 1 Cup Steamed Basmati/Brown Rice + Steamed Broccoli & Greens'
-          : '180g Soya Chunks Curry / Black Bean Bowl + 1 Cup Brown Rice + Tossed Salad',
-        nameHi: isNonVeg ? '180g ग्रिल्ड चिकन / फिश करी + 1 कप चावल + उबली ब्रोकली' : '180g सोया चंक्स करी + 1 कप चावल + सलाद',
-        namePa: isNonVeg ? '180g ਗ੍ਰਿਲਡ ਚਿਕਨ / ਮੱਛੀ ਕਰੀ + 1 ਕੱਪ ਚੌਲ + ਬ੍ਰੋਕਲੀ' : '180g ਸੋਇਆ ਚੰਕਸ ਕਰੀ + 1 ਕੱਪ ਚੌਲ + ਸਲਾਦ',
-        portion: '180g lean meat/soya + 150g rice + salad',
-        calories: Math.round(targetCalories * 0.33),
-        protein: Math.round(proteinGrams * 0.36),
-        carbs: Math.round(profile.carbGrams * 0.32),
-        fats: Math.round(profile.fatGrams * 0.26),
-        alternatives: ['Chicken tikka wrap with mint yogurt in whole wheat roti', 'Tuna salad with lime and olive oil'],
-        notes: 'High bio-availability amino acids for tissue recovery.',
-      },
+      lunch: isNorthIndian
+        ? {
+            name: '2-3 Phulkas (Multigrain/Wheat) + 1 Cup Dal Tadka / Rajma + 1 Bowl Mixed Sabzi + Cucumber Salad',
+            nameHi: '2-3 फुल्के + 1 कटोरी दाल/राजमा + 1 कटोरी मौसमी सब्ज़ी + सलाद',
+            namePa: '2-3 ਫੁਲਕੇ + 1 ਕੌਲੀ ਦਾਲ/ਰਾਜਮਾ + 1 ਕੌਲੀ ਸਬਜ਼ੀ + ਖੀਰਾ ਸਲਾਦ',
+            portion: '2-3 rotis + 150g dal + 100g sabzi + raw salad',
+            calories: Math.round(targetCalories * 0.33),
+            protein: Math.round(proteinGrams * 0.32),
+            carbs: Math.round(profile.carbGrams * 0.33),
+            fats: Math.round(profile.fatGrams * 0.28),
+            alternatives: ['1 cup brown rice + Chole (chickpea curry) + cucumber raita', 'Quinoa pulao with low-fat paneer cubes and broccoli'],
+            notes: 'Pairing legumes with grains provides a complete amino acid profile.',
+          }
+        : {
+            name: '1 Cup Brown Rice / 2 Rotis + Sambar / Dal + Stir-Fried Greens (Poriyal) + Curd',
+            nameHi: '1 कप ब्राउन राइस/रोटी + सांभर + पोरियाल सब्ज़ी + दही',
+            namePa: '1 ਕੱਪ ਬ੍ਰਾਊਨ ਚੌਲ/ਰੋਟੀ + ਸਾਂਭਰ + ਹਰੀ ਸਬਜ਼ੀ + ਦਹੀਂ',
+            portion: '1 cup cooked rice/2 rotis + 150g dal + 100g greens',
+            calories: Math.round(targetCalories * 0.33),
+            protein: Math.round(proteinGrams * 0.30),
+            carbs: Math.round(profile.carbGrams * 0.34),
+            fats: Math.round(profile.fatGrams * 0.28),
+            alternatives: ['Millet khichdi with curd and spinach', 'Lentil soup bowl with roasted vegetables'],
+            notes: 'Easily digestible and antioxidant dense.',
+          },
       eveningSnack: {
-        name: 'Whey / Plant Protein Scoop with Water or Buttermilk + 1 Rice Cake with Peanut Butter',
-        nameHi: 'प्रोटीन शेक या छाछ + पीनट बटर राइस केक',
-        namePa: 'ਪ੍ਰੋਟੀਨ ਸ਼ੇਕ ਜਾਂ ਲੱਸੀ + ਪੀਨਟ ਬਟਰ ਰਾਈਸ ਕੇਕ',
-        portion: '1 scoop + 1 rice cake',
-        calories: 180,
-        protein: 26,
-        carbs: 12,
-        fats: 4,
-        alternatives: ['Boiled egg whites with black pepper', 'Roasted chana with lemon juice'],
+        name: 'Spiced Buttermilk (Chaas) or Green Tea + Handful of Makhana (Foxnuts)',
+        nameHi: 'छाछ या ग्रीन टी + भुना मखाना',
+        namePa: 'ਮਸਾਲੇ ਵਾਲੀ ਲੱਸੀ ਜਾਂ ਗ੍ਰੀਨ ਟੀ + ਭੁੰਨੇ ਮਖਾਣੇ',
+        portion: '1 glass chaas + 25g roasted makhana',
+        calories: 120,
+        protein: 5,
+        carbs: 18,
+        fats: 3,
+        alternatives: ['Boiled edamame beans', 'Roasted soya beans snack'],
+        notes: 'Low glycemic index and calcium-dense.',
       },
       dinner: {
-        name: isNonVeg
-          ? 'Pan-Seared Salmon or Lemon Herb Chicken (150g) + Grilled Asparagus & Sweet Potato Mash'
-          : 'Lentil & Chickpea Protein Bowl with Roasted Bell Peppers & Quinoa',
-        nameHi: isNonVeg ? 'लेमन हर्ब चिकन / फिश + ग्रिल्ड सब्ज़ियां व शकरकंद' : 'क्विनोआ और चना प्रोटीन बाउल',
-        namePa: isNonVeg ? 'ਲੈਮਨ ਹਰਬ ਚਿਕਨ / ਮੱਛੀ + ਭੁੰਨੀਆਂ ਸਬਜ਼ੀਆਂ' : 'ਕਵਿਨੋਆ ਅਤੇ ਛੋਲੇ ਪ੍ਰੋਟੀਨ ਬਾਊਲ',
-        portion: '150g protein source + 150g roast veggies',
-        calories: Math.round(targetCalories * 0.24),
-        protein: Math.round(proteinGrams * 0.26),
-        carbs: Math.round(profile.carbGrams * 0.21),
-        fats: Math.round(profile.fatGrams * 0.25),
-        alternatives: ['Clear chicken vegetable soup with sourdough crouton', 'Tofu & bok choy broth bowl'],
+        name: 'Grilled Low-Fat Paneer / Tofu / Fish (150g) with Colorful Bell Peppers + 1 Small Roti / Soup',
+        nameHi: 'ग्रिल्ड पनीर/टोफू शिमला मिर्च के साथ + 1 हल्की रोटी या सूप',
+        namePa: 'ਭੁੰਨਿਆ ਪਨੀਰ/ਟੋਫੂ ਸ਼ਿਮਲਾ ਮਿਰਚਾਂ ਨਾਲ + 1 ਫੁਲਕਾ ਜਾਂ ਸੂਪ',
+        portion: '150g protein + veggies + 1 phulka',
+        calories: Math.round(targetCalories * 0.26),
+        protein: Math.round(proteinGrams * 0.28),
+        carbs: Math.round(profile.carbGrams * 0.23),
+        fats: Math.round(profile.fatGrams * 0.28),
+        alternatives: ['Warm lentil and vegetable stew with crushed walnuts', 'Moong dal khichdi with ghee tempering and roasted papad'],
+        notes: 'Light on carbs before sleeping to promote restorative digestion.',
+      },
+      bedtime: {
+        name: 'Warm Turmeric Cinnamon Milk (Low-Fat or Almond Milk)',
+        nameHi: 'हल्का गुनगुना हल्दी और दालचीनी वाला दूध',
+        namePa: 'ਕੋਸਾ ਹਲਦੀ ਅਤੇ ਦਾਲਚੀਨੀ ਵਾਲਾ ਦੁੱਧ',
+        portion: '1 small cup (150ml)',
+        calories: 80,
+        protein: 4,
+        carbs: 7,
+        fats: 3,
+        alternatives: ['Chamomile herbal tea', 'Ashwagandha warm infusion'],
+        notes: 'Curcumin + casein aids deep tissue repair and calm sleep.',
       },
     },
-    hydrationTips: `Drink minimum ${profile.waterIntakeLiters}L fluids. Keep electrolyte levels optimal with pink salt or lemon water during workouts.`,
+    hydrationTips: `Aim for ${profile.waterIntakeLiters} Liters of water daily. Drink 1 glass 30 mins before major meals to aid satiety and enzyme secretion.`,
     cookingTips: [
-      'Use an air-fryer or non-stick grill to cook meats with minimal added fats.',
-      'Marinate poultry/fish with yogurt, lemon, ginger-garlic paste, and Indian spices for tender texture without calorie bloat.',
+      'Measure cooking oil with a teaspoon (limit to 3–4 tsp/day) rather than pouring freely from the bottle.',
+      'Cook rotis without excess ghee coating; add a single drop directly to dal or subzi if needed.',
+      'Use spices like jeera, ajwain, turmeric, and black pepper to boost bioavailability and avoid bloat.',
     ],
   };
 }
@@ -531,20 +780,30 @@ export function generateWorkoutPlan(
   const days = options?.daysPerWeek || (profile.age >= 50 ? 3 : 4);
   const diff = options?.difficulty || (profile.age >= 50 ? 'beginner' : 'intermediate');
   const isSeniorOrJoint = profile.age >= 50 || profile.healthFlags.jointIssues;
+  const isMuscleGain = profile.goal === 'gain_muscle';
+  const isFatLoss = profile.goal === 'lose_fat';
 
   const safetyNotes: string[] = [];
   if (isSeniorOrJoint) {
     safetyNotes.push('Low-Impact Mode Activated: Reduced spinal axial loading; controlled tempo with joint protection.');
     safetyNotes.push('Warm-up minimum 8–10 minutes: dynamic arm circles, hip openers, and ankle rotations.');
+  } else if (isMuscleGain) {
+    safetyNotes.push('Progressive Overload Principle: Aim to add 1 repetition or +1kg weight each week once target reps are cleanly achieved.');
+    safetyNotes.push('Rest intervals: Take full 90–120 seconds between compound sets to replenish ATP-CP energy stores for peak mechanical tension.');
+  } else if (isFatLoss) {
+    safetyNotes.push('Metabolic Afterburn (EPOC): Keep rest periods strictly under 60 seconds to maintain elevated heart rate and mitochondrial density.');
+    safetyNotes.push('Preserve Lean Mass: Lift with full effort and clean form; never sacrifice resistance weight just to move faster.');
   }
 
   const schedule: WorkoutDay[] = [];
 
-  if (days === 3 || isSeniorOrJoint) {
-    // 3 Days Full Body (ideal for general health, seniors, beginners)
+  // ==========================================
+  // 1. SENIORS / JOINT ISSUES / 3-DAY ROUTINE
+  // ==========================================
+  if (days === 3 || isSeniorOrJoint || profile.goal === 'general_health') {
     schedule.push({
       dayNumber: 1,
-      dayName: 'Day 1: Full Body Strength & Stability',
+      dayName: 'Day 1: Full Body Strength & Joint Stability',
       focus: 'Quads, Chest, Back & Core Foundation',
       cooldownNotes: '5 minutes deep diaphragmatic breathing + quad & chest doorway stretch',
       exercises: [
@@ -646,7 +905,7 @@ export function generateWorkoutPlan(
 
     schedule.push({
       dayNumber: 3,
-      dayName: 'Day 3: Conditioning, Core & Total Body Power',
+      dayName: 'Day 3: Conditioning, Core & Total Body Balance',
       focus: 'Endurance, Anti-Rotation & Muscular Balance',
       cooldownNotes: 'Cobra stretch, pigeon pose, and foam rolling calves & thoracic spine',
       exercises: [
@@ -693,16 +952,462 @@ export function generateWorkoutPlan(
         },
       ],
     });
-  } else {
-    // 4-Day Upper / Lower Split
+  }
+
+  // ==========================================================
+  // 2. HYPERTROPHY & LEAN MUSCLE GAIN PROTOCOL (4-DAY SPLIT)
+  // ==========================================================
+  else if (isMuscleGain) {
     schedule.push({
       dayNumber: 1,
-      dayName: 'Day 1: Upper Body Power',
-      focus: 'Chest, Upper Back, Shoulders & Arms',
-      cooldownNotes: 'Doorway chest stretch and band dislocations for shoulders',
+      dayName: 'Day 1: Upper Body Hypertrophy (Chest & Back Width)',
+      focus: 'Pectorals, Lats, Rhomboids & Biceps Growth',
+      cooldownNotes: 'Doorway pectoral stretch and lat foam rolling',
       exercises: [
         {
-          name: env === 'gym' ? 'Barbell / Dumbbell Bench Press' : 'Decline or Standard Push-ups',
+          name: env === 'gym' ? 'Barbell or Heavy Dumbbell Flat Bench Press' : 'Weighted / Deficit Push-ups (Hands on Books)',
+          category: 'strength',
+          targetMuscles: ['Pectoralis Major', 'Triceps', 'Anterior Deltoids'],
+          sets: 4,
+          reps: '8-10',
+          restSeconds: 120,
+          notes: 'Lower the weight with a 3-second eccentric tempo; explosive press up.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Incline Dumbbell Press (30-Degree Angle)' : 'Feet-Elevated Decline Push-ups',
+          category: 'strength',
+          targetMuscles: ['Upper Clavicular Chest'],
+          sets: 4,
+          reps: '10-12',
+          restSeconds: 90,
+          notes: 'Maximizes upper chest shelf development without excessive front delt takeover.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Bent-Over Barbell or Heavy DB Row' : 'Inverted Table Rows / Heavy Resistance Band Rows',
+          category: 'strength',
+          targetMuscles: ['Lats', 'Middle Trapezius', 'Biceps'],
+          sets: 4,
+          reps: '8-10',
+          restSeconds: 90,
+          notes: 'Keep spine completely neutral; pull toward lower belly button.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Lat Pulldowns (Wide / Neutral Grip)' : 'Towel Doorframe Pull-ins / Band Pulldowns',
+          category: 'strength',
+          targetMuscles: ['Latissimus Dorsi', 'Teres Major'],
+          sets: 4,
+          reps: '10-12',
+          restSeconds: 75,
+          notes: 'Drive elbows down into your hip pockets; squeeze lats at the bottom.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Incline Dumbbell Bicep Curls' : 'Resistance Band Bicep Curls (3-Second Negative)',
+          category: 'strength',
+          targetMuscles: ['Biceps Long Head'],
+          sets: 3,
+          reps: '12-15',
+          restSeconds: 60,
+          notes: 'Full stretch at the bottom; do not swing hips or shoulders.',
+          difficulty: diff,
+        },
+      ],
+    });
+
+    schedule.push({
+      dayNumber: 2,
+      dayName: 'Day 2: Lower Body Hypertrophy (Quads & Hamstring Mass)',
+      focus: 'Squats, Hinges, Calves & Core Rigidity',
+      cooldownNotes: 'Deep couch stretch for hip flexors and seated hamstring stretch',
+      exercises: [
+        {
+          name: env === 'gym' ? 'Barbell Back Squat or Hack Squat' : 'Bulgarian Split Squats (Heavy Backpack / Dumbbells)',
+          category: 'strength',
+          targetMuscles: ['Quadriceps', 'Gluteus Maximus'],
+          sets: 4,
+          reps: '8-10',
+          restSeconds: 120,
+          notes: 'Break parallel depth cleanly; push through midfoot.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Romanian Deadlift (RDL)' : 'Single-Leg Dumbbell Romanian Deadlift',
+          category: 'strength',
+          targetMuscles: ['Hamstrings', 'Glutes', 'Erectors'],
+          sets: 4,
+          reps: '8-10',
+          restSeconds: 120,
+          notes: 'Push hips backward until deep hamstring stretch; drive through heels.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Leg Press or Dumbbell Walking Lunges' : 'Bodyweight Jump Squats into Walking Lunges',
+          category: 'strength',
+          targetMuscles: ['Quads', 'Adductors', 'Glutes'],
+          sets: 3,
+          reps: '10-12',
+          restSeconds: 90,
+          notes: 'Keep torso upright; take generous strides for maximum glute loading.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Standing Calf Raises (Machine or Smith)' : 'Single-Leg Calf Raises on Stair Edge (2s Peak Pause)',
+          category: 'strength',
+          targetMuscles: ['Gastrocnemius', 'Soleus'],
+          sets: 4,
+          reps: '15-20',
+          restSeconds: 60,
+          notes: 'Hold peak contraction for 2 full seconds at the top; feel the burn.',
+          difficulty: diff,
+        },
+        {
+          name: 'Hanging Leg Raises / Lying Leg Curls',
+          category: 'core',
+          targetMuscles: ['Lower Rectus Abdominis'],
+          sets: 3,
+          reps: '12-15',
+          restSeconds: 60,
+          notes: 'Curl hips upward toward ribs rather than swinging legs with momentum.',
+          difficulty: diff,
+        },
+      ],
+    });
+
+    schedule.push({
+      dayNumber: 3,
+      dayName: 'Day 3: Push Hypertrophy (Shoulders & Triceps 3D Cap)',
+      focus: 'Deltoid Width, Upper Chest & Tricep Thickness',
+      cooldownNotes: 'Cross-body shoulder stretch and tricep overhead reach',
+      exercises: [
+        {
+          name: env === 'gym' ? 'Standing Overhead Barbell or Dumbbell Press' : 'Pike Push-ups or Handstand Push-up Progressions',
+          category: 'strength',
+          targetMuscles: ['Anterior Deltoid', 'Lateral Deltoid', 'Triceps'],
+          sets: 4,
+          reps: '8-10',
+          restSeconds: 90,
+          notes: 'Lock glutes and brace core; press straight overhead without backward lean.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Dumbbell / Cable Lateral Raises' : 'Water Bottle / Band Lateral Raises (High Volume)',
+          category: 'strength',
+          targetMuscles: ['Lateral Deltoids (Shoulder Width)'],
+          sets: 4,
+          reps: '12-15',
+          restSeconds: 60,
+          notes: 'Raise in the scapular plane with pinky slightly elevated; build 3D shoulders.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Cable Rope Tricep Pushdown' : 'Close-Grip Diamond Push-ups or Chair Dips',
+          category: 'strength',
+          targetMuscles: ['Triceps Lateral & Medial Head'],
+          sets: 4,
+          reps: '12-15',
+          restSeconds: 60,
+          notes: 'Spread the rope apart at the bottom lockout; keep elbows pinned to ribs.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Overhead Cable Tricep Extension' : 'Overhead Dumbbell Tricep Extension',
+          category: 'strength',
+          targetMuscles: ['Triceps Long Head'],
+          sets: 3,
+          reps: '12-15',
+          restSeconds: 60,
+          notes: 'Deep stretch behind head targets the largest head of the triceps.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Pec Deck Flyes or Cable Crossover' : 'Wide Stance Floor Push-ups with 2s Chest Stretch',
+          category: 'strength',
+          targetMuscles: ['Sternal Pectorals'],
+          sets: 3,
+          reps: '12-15',
+          restSeconds: 60,
+          notes: 'Hug a big tree movement; intense peak contraction.',
+          difficulty: diff,
+        },
+      ],
+    });
+
+    schedule.push({
+      dayNumber: 4,
+      dayName: 'Day 4: Pull Hypertrophy & Posterior Chain Power',
+      focus: 'Deadlift Power, Traps, Rear Delts & Forearm Grip',
+      cooldownNotes: 'Child’s pose, foam rolling thoracic spine, and forearm stretches',
+      exercises: [
+        {
+          name: env === 'gym' ? 'Conventional or Trap Bar Deadlift' : 'Heavy Banded Good Mornings / Single-Leg RDL',
+          category: 'strength',
+          targetMuscles: ['Hamstrings', 'Glutes', 'Lats', 'Traps', 'Erectors'],
+          sets: 4,
+          reps: '6-8',
+          restSeconds: 150,
+          notes: 'Reset after every rep; engage lats and push floor away with your legs.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Seated Cable Row (Close-Grip V-Bar)' : 'Resistance Band Rows with 2-Second Hold',
+          category: 'strength',
+          targetMuscles: ['Rhomboids', 'Mid-Trapezius', 'Lats'],
+          sets: 4,
+          reps: '10-12',
+          restSeconds: 75,
+          notes: 'Retract shoulder blades fully before pulling arms back.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Cable Face Pulls (to Forehead)' : 'Band Pull-Aparts / Prone Y-Raises',
+          category: 'mobility',
+          targetMuscles: ['Rear Deltoids', 'Rotator Cuff', 'Lower Traps'],
+          sets: 4,
+          reps: '15',
+          restSeconds: 60,
+          notes: 'Externally rotate hands at end of pull; builds round shoulders and fixes posture.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Dumbbell Hammer Curls' : 'Resistance Band Hammer Curls',
+          category: 'strength',
+          targetMuscles: ['Brachialis', 'Brachioradialis', 'Biceps'],
+          sets: 3,
+          reps: '12-15',
+          restSeconds: 60,
+          notes: 'Neutral grip thickens upper arm and strengthens grip for heavy deadlifts.',
+          difficulty: diff,
+        },
+        {
+          name: 'Ab Wheel Rollouts or Extended Plank Hold',
+          category: 'core',
+          targetMuscles: ['Full Abdominal Wall', 'Serratus Anterior'],
+          sets: 3,
+          reps: '10-12 rollouts (or 60s hold)',
+          restSeconds: 60,
+          notes: 'Do not let lower back sag; maintain a strong posterior pelvic tilt.',
+          difficulty: diff,
+        },
+      ],
+    });
+  }
+
+  // ==========================================================
+  // 3. FAT-LOSS & METABOLIC CONDITIONING PROTOCOL (4-DAY SPLIT)
+  // ==========================================================
+  else if (isFatLoss) {
+    schedule.push({
+      dayNumber: 1,
+      dayName: 'Day 1: Metabolic Push & Core Intervals',
+      focus: 'Thrusters, Upper Pushing, High-Heart-Rate EPOC',
+      cooldownNotes: '5 minutes brisk walk + doorway chest stretch and child’s pose',
+      exercises: [
+        {
+          name: env === 'gym' ? 'Dumbbell Thrusters (Squat to Overhead Press)' : 'Bodyweight Thrusters (or with Backpack)',
+          category: 'strength',
+          targetMuscles: ['Quads', 'Glutes', 'Shoulders', 'Core'],
+          sets: 4,
+          reps: '12-15',
+          restSeconds: 60,
+          notes: 'Explosive full-body movement that spikes cardiac output and calorie burning.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Dumbbell Bench Press Superset with Push-ups' : 'Standard Push-ups Superset with Mountain Climbers',
+          category: 'strength',
+          targetMuscles: ['Chest', 'Triceps', 'Core'],
+          sets: 4,
+          reps: '12 reps + 10 push-ups',
+          restSeconds: 60,
+          notes: 'Minimal rest between exercises forces high muscular endurance and glycogen depletion.',
+          difficulty: diff,
+        },
+        {
+          name: 'Mountain Climbers to High Plank Hold',
+          category: 'core',
+          targetMuscles: ['Abdominals', 'Hip Flexors', 'Shoulders'],
+          sets: 3,
+          reps: '45 seconds continuous',
+          restSeconds: 45,
+          notes: 'Keep hips level with shoulders; drive knees rapidly toward chest.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Incline Treadmill Power Walk (12% Incline, 4.8 km/h)' : 'Brisk Outdoor Hill Walk or Stair Climbing',
+          category: 'cardio',
+          targetMuscles: ['Cardiovascular System', 'Calves', 'Glutes'],
+          sets: 1,
+          reps: '15 minutes',
+          restSeconds: 0,
+          notes: 'Zone 2 aerobic flush: mobilizes free fatty acids released during the lifting circuit.',
+          difficulty: diff,
+        },
+      ],
+    });
+
+    schedule.push({
+      dayNumber: 2,
+      dayName: 'Day 2: Metabolic Pull & Posterior Chain Density',
+      focus: 'Kettlebell Swings, DB Rows & High Density',
+      cooldownNotes: 'Hamstring stretch and cat-cow spine de-compression',
+      exercises: [
+        {
+          name: env === 'gym' ? 'Kettlebell or Heavy Dumbbell Swings' : 'Banded Explosive Hip Hinges / Swings',
+          category: 'strength',
+          targetMuscles: ['Glutes', 'Hamstrings', 'Lower Back', 'Core'],
+          sets: 4,
+          reps: '15-20',
+          restSeconds: 60,
+          notes: 'Snap hips forward explosively; this is a hinge movement, not a squat.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Dumbbell Renegade Rows (Push-up Position)' : 'Plank Alternating Shoulder Taps',
+          category: 'strength',
+          targetMuscles: ['Lats', 'Core Anti-Rotation', 'Biceps'],
+          sets: 4,
+          reps: '10 per arm',
+          restSeconds: 60,
+          notes: 'Widen feet for stability; resist hip twisting as each dumbbell is rowed.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Lat Pulldowns Superset with Band Face Pulls' : 'Doorframe Rows Superset with Band Pull-Aparts',
+          category: 'strength',
+          targetMuscles: ['Lats', 'Upper Back', 'Rotator Cuff'],
+          sets: 3,
+          reps: '12-15 reps',
+          restSeconds: 60,
+          notes: 'Keeps upper back dense while posture is maintained under fatigue.',
+          difficulty: diff,
+        },
+        {
+          name: 'Russian Twists with Dumbbell or Medicine Ball',
+          category: 'core',
+          targetMuscles: ['Obliques', 'Transverse Abdominis'],
+          sets: 3,
+          reps: '20 twists total',
+          restSeconds: 45,
+          notes: 'Elevate heels off ground for added difficulty; rotate through thoracic spine.',
+          difficulty: diff,
+        },
+      ],
+    });
+
+    schedule.push({
+      dayNumber: 3,
+      dayName: 'Day 3: Lower Body High-Volume Calorie Burn',
+      focus: 'Goblet Squats, Walking Lunges & Jump Intervals',
+      cooldownNotes: 'Pigeon pose stretch and quad doorway stretch',
+      exercises: [
+        {
+          name: env === 'gym' ? 'Goblet Squats with 1-Second Bottom Pause' : 'Bodyweight Squats with 1-Second Bottom Pause',
+          category: 'strength',
+          targetMuscles: ['Quadriceps', 'Glutes', 'Core'],
+          sets: 4,
+          reps: '12-15',
+          restSeconds: 60,
+          notes: 'Eliminating the stretch reflex forces pure muscular work and high calorie burn.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Walking Dumbbell Lunges' : 'Walking Bodyweight Lunges',
+          category: 'strength',
+          targetMuscles: ['Quads', 'Glutes', 'Hamstrings'],
+          sets: 3,
+          reps: '12 steps per leg',
+          restSeconds: 60,
+          notes: 'Continuous lunges elevate cardiovascular burn while building leg definition.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Romanian Deadlift (Moderate Weight, Fast Tempo)' : 'Single-Leg Bodyweight Deadlift',
+          category: 'strength',
+          targetMuscles: ['Hamstrings', 'Glutes'],
+          sets: 3,
+          reps: '12-15',
+          restSeconds: 60,
+          notes: 'Controlled eccentric descent; squeeze glutes at the top.',
+          difficulty: diff,
+        },
+        {
+          name: 'Jump Rope or High Knees Cardio Intervals',
+          category: 'cardio',
+          targetMuscles: ['Calves', 'Cardiovascular System'],
+          sets: 4,
+          reps: '45 seconds on / 15 seconds rest',
+          restSeconds: 45,
+          notes: 'High-intensity interval finisher to exhaust glycogen and maximize EPOC.',
+          difficulty: diff,
+        },
+      ],
+    });
+
+    schedule.push({
+      dayNumber: 4,
+      dayName: 'Day 4: Total Body Density Circuit & Aerobic Flush',
+      focus: 'Full-Body Density, Farmer’s Carries & Fat Burn',
+      cooldownNotes: 'Full-body foam rolling and 5 minutes deep nasal breathing',
+      exercises: [
+        {
+          name: env === 'gym' ? 'Dumbbell Clean & Push Press' : 'Burpees into Step-backs (Controlled Form)',
+          category: 'strength',
+          targetMuscles: ['Total Body Compound'],
+          sets: 4,
+          reps: '10-12',
+          restSeconds: 60,
+          notes: 'Coordinate legs and shoulders in one fluid, powerful movement.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Farmer’s Carry (Heavy Dumbbells in each hand)' : 'Overhead Water Jug Carry / Slow March',
+          category: 'core',
+          targetMuscles: ['Grip', 'Traps', 'Core Stability'],
+          sets: 4,
+          reps: '45 seconds walking',
+          restSeconds: 60,
+          notes: 'Walk with tall posture; do not allow shoulders to roll forward.',
+          difficulty: diff,
+        },
+        {
+          name: 'Plank with Alternating Knee Taps',
+          category: 'core',
+          targetMuscles: ['Rectus Abdominis', 'Obliques'],
+          sets: 3,
+          reps: '45 seconds',
+          restSeconds: 45,
+          notes: 'Lock in core tightness; tap knees gently to floor one at a time.',
+          difficulty: diff,
+        },
+        {
+          name: env === 'gym' ? 'Steady-State Stationary Bike or Elliptical' : 'Brisk Outdoor Walk / Jog',
+          category: 'cardio',
+          targetMuscles: ['Cardiovascular System', 'Fat Oxidation'],
+          sets: 1,
+          reps: '20 minutes',
+          restSeconds: 0,
+          notes: 'Zone 2 aerobic zone (115–130 bpm) utilizes fat as primary fuel source.',
+          difficulty: diff,
+        },
+      ],
+    });
+  }
+
+  // ==========================================================
+  // 4. MAINTENANCE & RECOMPOSITION (4-DAY SPLIT)
+  // ==========================================================
+  else {
+    schedule.push({
+      dayNumber: 1,
+      dayName: 'Day 1: Upper Body Strength & Posture',
+      focus: 'Chest, Upper Back, Shoulders & Arms',
+      cooldownNotes: 'Doorway chest stretch and band dislocations',
+      exercises: [
+        {
+          name: env === 'gym' ? 'Barbell / Dumbbell Bench Press' : 'Standard Push-ups',
           category: 'strength',
           targetMuscles: ['Chest', 'Triceps'],
           sets: 4,
@@ -712,7 +1417,7 @@ export function generateWorkoutPlan(
           difficulty: diff,
         },
         {
-          name: env === 'gym' ? 'Bent-Over Barbell or Dumbbell Row' : 'Inverted Row under Table / Heavy Band Rows',
+          name: env === 'gym' ? 'Bent-Over Barbell or Dumbbell Row' : 'Inverted Row / Band Rows',
           category: 'strength',
           targetMuscles: ['Lats', 'Mid-back'],
           sets: 4,
@@ -746,12 +1451,12 @@ export function generateWorkoutPlan(
 
     schedule.push({
       dayNumber: 2,
-      dayName: 'Day 2: Lower Body Power & Core',
+      dayName: 'Day 2: Lower Body Power & Core Stability',
       focus: 'Quads, Hamstrings, Calves & Deep Core',
       cooldownNotes: 'Couch stretch for hip flexors and seated forward fold',
       exercises: [
         {
-          name: env === 'gym' ? 'Barbell Back Squat / Hack Squat' : 'Bulgarian Split Squats (Foot elevated)',
+          name: env === 'gym' ? 'Barbell Back Squat / Hack Squat' : 'Bulgarian Split Squats',
           category: 'strength',
           targetMuscles: ['Quads', 'Glutes'],
           sets: 4,
@@ -761,7 +1466,7 @@ export function generateWorkoutPlan(
           difficulty: diff,
         },
         {
-          name: env === 'gym' ? 'Romanian Deadlift (RDL)' : 'Single-Leg Romanian Deadlift (Bodyweight/Water bottle)',
+          name: env === 'gym' ? 'Romanian Deadlift (RDL)' : 'Single-Leg Romanian Deadlift',
           category: 'strength',
           targetMuscles: ['Hamstrings', 'Glutes'],
           sets: 4,
@@ -826,7 +1531,7 @@ export function generateWorkoutPlan(
           sets: 4,
           reps: '12-15',
           restSeconds: 60,
-          notes: 'Slight forward lean, raise arms in scapular plane (not straight out to sides).',
+          notes: 'Slight forward lean, raise arms in scapular plane.',
           difficulty: diff,
         },
         {
@@ -844,7 +1549,7 @@ export function generateWorkoutPlan(
 
     schedule.push({
       dayNumber: 4,
-      dayName: 'Day 4: Lower Body Volume & Functional Posterior Chain',
+      dayName: 'Day 4: Lower Body Volume & Functional Chain',
       focus: 'Glutes, Adductors, Hamstrings & Obliques',
       cooldownNotes: 'Pigeon pose stretch and butterfly groin stretch',
       exercises: [
@@ -869,7 +1574,7 @@ export function generateWorkoutPlan(
           difficulty: diff,
         },
         {
-          name: env === 'gym' ? 'Seated or Lying Leg Curl' : 'Slider Hamstring Curls (Towel on smooth floor)',
+          name: env === 'gym' ? 'Seated or Lying Leg Curl' : 'Slider Hamstring Curls (Towel on floor)',
           category: 'strength',
           targetMuscles: ['Hamstrings'],
           sets: 3,
@@ -892,9 +1597,21 @@ export function generateWorkoutPlan(
     });
   }
 
+  // Dynamic Title based on User Objective & Environment
+  let planTitle = `${env === 'gym' ? 'Personalized Gym' : 'Home'} Workout (${days}-Day Split)`;
+  if (isSeniorOrJoint) {
+    planTitle = `Joint-Safe & Longevity ${env === 'gym' ? 'Gym' : 'Home'} Protocol (${days}-Day Split)`;
+  } else if (isMuscleGain) {
+    planTitle = `Personalized Hypertrophy & Muscle Growth (${env === 'gym' ? 'Gym' : 'Home'} • ${days}-Day Split)`;
+  } else if (isFatLoss) {
+    planTitle = `Personalized Fat-Loss & Metabolic Burn (${env === 'gym' ? 'Gym' : 'Home'} • ${days}-Day Split)`;
+  } else {
+    planTitle = `Body Recomposition & Functional Strength (${env === 'gym' ? 'Gym' : 'Home'} • ${days}-Day Split)`;
+  }
+
   return {
     id: `plan_${Date.now()}`,
-    title: `${profile.age >= 50 ? 'Longevity & Joint-Safe' : 'Personalized'} ${env === 'gym' ? 'Gym' : 'Home'} Workout (${days}-Day Split)`,
+    title: planTitle,
     environment: env,
     daysPerWeek: days,
     splitType: days === 3 || isSeniorOrJoint ? 'full_body' : 'upper_lower',

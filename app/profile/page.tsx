@@ -43,9 +43,9 @@ import {
 import MedicalDisclaimer from '@/components/MedicalDisclaimer';
 
 export default function ProfilePage() {
-  const { user, profile, setProfile, lang } = useApp();
+  const { user, profile, setProfile, lang, isDark } = useApp();
 
-  const [formData, setFormData] = useState<Partial<UserProfile>>({
+  const [formData, setFormData] = useState<Partial<UserProfile> & { workoutEnvironment?: 'gym' | 'home' }>({
     name: profile?.name || user?.name || 'Athlete',
     age: profile?.age || 28,
     gender: profile?.gender || 'male',
@@ -56,6 +56,7 @@ export default function ProfilePage() {
     goal: profile?.goal || 'lose_fat',
     dietPreference: profile?.dietPreference || 'veg',
     cuisinePreference: profile?.cuisinePreference || 'north_indian',
+    workoutEnvironment: (profile as any)?.workoutEnvironment || 'gym',
     healthFlags: profile?.healthFlags || {
       diabetes: false,
       thyroid: false,
@@ -75,9 +76,9 @@ export default function ProfilePage() {
   const programTimeline = calculateProgramTimeline(computedTargets, []);
   const mealPlan: DailyMealPlan = generateMealPlan(computedTargets);
   const workoutPlan: WorkoutPlan = generateWorkoutPlan(computedTargets, {
-    environment: 'gym',
-    daysPerWeek: computedTargets.ageGroup === 'seniors' ? 3 : 4,
-    difficulty: 'beginner',
+    environment: formData.workoutEnvironment || 'gym',
+    daysPerWeek: computedTargets.ageGroup === 'seniors' || computedTargets.goal === 'general_health' ? 3 : 4,
+    difficulty: computedTargets.ageGroup === 'seniors' ? 'beginner' : 'intermediate',
   });
 
   const handleSave = async (e: React.FormEvent) => {
@@ -181,11 +182,12 @@ export default function ProfilePage() {
                 <select
                   value={formData.gender}
                   onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
+                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
                 >
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
+                  <option value="male" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">Male</option>
+                  <option value="female" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">Female</option>
+                  <option value="other" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">Other</option>
                 </select>
               </div>
 
@@ -264,12 +266,21 @@ export default function ProfilePage() {
                 <select
                   value={formData.goal}
                   onChange={(e) => setFormData({ ...formData, goal: e.target.value as FitnessGoal })}
+                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
                 >
-                  <option value="lose_fat">Lose Body Fat (Calorie Deficit)</option>
-                  <option value="gain_muscle">Build Muscle (Lean Hypertrophy)</option>
-                  <option value="maintain">Body Recomposition / Maintain</option>
-                  <option value="general_health">Longevity & Heart Health</option>
+                  <option value="lose_fat" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Lose Body Fat (Calorie Deficit & EPOC Burn)
+                  </option>
+                  <option value="gain_muscle" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Build Muscle (Lean Hypertrophy & Progressive Overload)
+                  </option>
+                  <option value="maintain" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Body Recomposition (Fat Cut + Muscle Preservation)
+                  </option>
+                  <option value="general_health" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Longevity, Mobility & Heart Health
+                  </option>
                 </select>
               </div>
 
@@ -280,13 +291,24 @@ export default function ProfilePage() {
                 <select
                   value={formData.activityLevel}
                   onChange={(e) => setFormData({ ...formData, activityLevel: e.target.value as ActivityLevel })}
+                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
                 >
-                  <option value="sedentary">Sedentary (Desk Job, minimal exercise)</option>
-                  <option value="light">Lightly Active (1–3 workout days)</option>
-                  <option value="moderate">Moderately Active (3–5 workout days)</option>
-                  <option value="very_active">Very Active (6–7 workout days)</option>
-                  <option value="extra_active">Extremely Active (Athletic labor / 2x daily)</option>
+                  <option value="sedentary" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Sedentary (Desk Job, minimal exercise)
+                  </option>
+                  <option value="light" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Lightly Active (1–3 workout days/week)
+                  </option>
+                  <option value="moderate" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Moderately Active (3–5 workout days/week)
+                  </option>
+                  <option value="very_active" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Very Active (6–7 workout days/week)
+                  </option>
+                  <option value="extra_active" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Extremely Active (Athletic labor / 2x daily training)
+                  </option>
                 </select>
               </div>
 
@@ -297,12 +319,21 @@ export default function ProfilePage() {
                 <select
                   value={formData.dietPreference}
                   onChange={(e) => setFormData({ ...formData, dietPreference: e.target.value as DietaryPreference })}
+                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
                 >
-                  <option value="veg">Vegetarian (Lacto-Veg)</option>
-                  <option value="non_veg">Non-Vegetarian (Chicken/Fish)</option>
-                  <option value="eggetarian">Eggetarian</option>
-                  <option value="vegan">Vegan (100% Plant-Based)</option>
+                  <option value="veg" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Vegetarian (Lacto-Veg: Dal, Paneer, Curd)
+                  </option>
+                  <option value="non_veg" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Non-Vegetarian (Chicken, Fish, Eggs)
+                  </option>
+                  <option value="eggetarian" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Eggetarian (Vegetarian + Eggs)
+                  </option>
+                  <option value="vegan" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Vegan (100% Plant-Based: Soya, Tofu, Legumes)
+                  </option>
                 </select>
               </div>
 
@@ -313,11 +344,37 @@ export default function ProfilePage() {
                 <select
                   value={formData.cuisinePreference}
                   onChange={(e) => setFormData({ ...formData, cuisinePreference: e.target.value as CuisinePreference })}
+                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
                 >
-                  <option value="north_indian">North Indian / Punjabi (Roti, Dal, Paneer)</option>
-                  <option value="south_indian">South Indian (Idli, Dosa, Sambar, Rice)</option>
-                  <option value="continental">Continental / Global Bowls</option>
+                  <option value="north_indian" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    North Indian / Punjabi (Roti, Dal, Paneer, Sabzi)
+                  </option>
+                  <option value="south_indian" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    South Indian (Idli, Dosa, Sambar, Rasam, Rice)
+                  </option>
+                  <option value="continental" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Continental / Global (Oats, Salads, Protein Bowls)
+                  </option>
+                </select>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                  Workout Location & Available Equipment
+                </label>
+                <select
+                  value={formData.workoutEnvironment || 'gym'}
+                  onChange={(e) => setFormData({ ...formData, workoutEnvironment: e.target.value as 'gym' | 'home' })}
+                  style={{ colorScheme: isDark ? 'dark' : 'light' }}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2.5 font-semibold text-slate-900 dark:text-white"
+                >
+                  <option value="gym" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Gym Setup (Dumbbells, Barbells, Cables & Machines)
+                  </option>
+                  <option value="home" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
+                    Home Workout (Bodyweight, Resistance Bands & Minimal Equipment)
+                  </option>
                 </select>
               </div>
             </div>
@@ -657,7 +714,15 @@ export default function ProfilePage() {
                       {workoutPlan.title}
                     </h4>
                     <p className="text-[11px] text-slate-500">
-                      {workoutPlan.daysPerWeek} Days/Week • {computedTargets.ageGroup === 'seniors' ? 'Joint-Safe 45+ Protocol' : 'Strength & Metabolic Protocol'}
+                      {workoutPlan.daysPerWeek} Days/Week • {
+                        computedTargets.ageGroup === 'seniors'
+                          ? 'Joint-Safe 45+ Longevity Protocol'
+                          : computedTargets.goal === 'gain_muscle'
+                          ? 'Hypertrophy & Progressive Overload Protocol'
+                          : computedTargets.goal === 'lose_fat'
+                          ? 'Fat-Loss & High-EPOC Metabolic Burn'
+                          : 'Body Recomposition & Core Strength'
+                      }
                     </p>
                   </div>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">

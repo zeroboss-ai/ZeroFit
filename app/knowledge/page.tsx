@@ -143,7 +143,7 @@ export default function KnowledgeHubPage() {
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 font-semibold focus:outline-none"
             >
               {ageGroups.map((ag) => (
-                <option key={ag.key} value={ag.key}>
+                <option key={ag.key} value={ag.key} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
                   {ag.label}
                 </option>
               ))}
@@ -158,7 +158,7 @@ export default function KnowledgeHubPage() {
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 dark:text-slate-300 font-semibold focus:outline-none"
             >
               {goals.map((g) => (
-                <option key={g.key} value={g.key}>
+                <option key={g.key} value={g.key} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 py-1">
                   {g.label}
                 </option>
               ))}
